@@ -30,6 +30,22 @@ Cached Electron archives are accepted only when their SHA-256 matches
 tool. Update that pinned checksum from the official Electron release whenever the
 Electron version changes.
 
+## GitHub Release assets
+
+GitHub requires every individual Release asset to remain below 2 GiB. The bundled
+Windows runtime is larger even after compression, so split the verified
+self-extracting package after `build_release.ps1` completes:
+
+```powershell
+.\packaging\New-GitHubReleaseAssets.ps1
+```
+
+Publish every `.part-###` file, the generated `Join-and-Run-*.cmd`, and
+`SHA256SUMS-GITHUB.txt` together. Users place all files in one directory and run
+the CMD file; it rebuilds the original self-extracting EXE, verifies its SHA-256,
+and only then starts it. The generated EXE is unsigned unless the original release
+was built through the Authenticode workflow described below.
+
 ## Build-tool audit policy
 
 The desktop application has no production npm dependencies, and CI requires the
@@ -67,7 +83,7 @@ $env:T8_BREEZE_UPDATE_URL = 'https://downloads.example.com/breeze/windows/'
 
 The application accepts only HTTPS URLs without embedded credentials. Without a
 valid feed it makes no update request and keeps the offline manifest verifier
-available. Version 0.2.2 uses manual download/replace updates; production EXEs
+available. Version 0.2.3 uses manual download/replace updates; production EXEs
 should be Authenticode signed by the same trusted publisher.
 
 ## Offline integrity check

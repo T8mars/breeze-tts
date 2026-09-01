@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 from pathlib import Path
 
@@ -33,3 +34,10 @@ def test_release_version_is_consistent_across_desktop_backend_and_comfy() -> Non
     assert f"DESKTOP {desktop_version}" in desktop_html
     assert f"styles.css?v={desktop_version}" in desktop_html
     assert f"renderer.js?v={desktop_version}" in desktop_html
+
+
+def test_runtime_lock_hash_is_canonical_across_line_endings() -> None:
+    manifest = json.loads((ROOT / "manifests" / "desktop-runtime.json").read_text(encoding="utf-8"))
+    lock_bytes = (ROOT / manifest["resolved_lock"]).read_bytes()
+    canonical = lock_bytes.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    assert hashlib.sha256(canonical).hexdigest() == manifest["resolved_lock_sha256"]

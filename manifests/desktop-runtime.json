@@ -19,7 +19,7 @@
     "websockets": "16.1.1"
   },
   "resolved_lock": "requirements-desktop.lock.txt",
-  "resolved_lock_sha256": "9fbb6b62bfc200ba8e7ec1de0b3a5381cfd64b21033a52430e38e517597fdb90",
+  "resolved_lock_sha256": "1a87cf98e201723f0235614dbf601d124fe8c7c744db9e461498c647688226da",
   "runtime_size_bytes": 5413454032,
   "verification": [
     "packaging/verify_runtime.py",

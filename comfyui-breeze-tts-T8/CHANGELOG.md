@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.3 — 2026-09-01
+
+- Aligns the node bundle with Voice Studio 0.2.3 and its quick-start, performance-recipe, responsive navigation, and global task-feedback release.
+- Keeps all eight node contracts and the host-owned Torch/Transformers policy unchanged; compatibility remains `transformers>=4.57,<6`.
+
 ## 0.2.2 — 2026-09-01
 
 - Documents a `--no-deps` manual-install path and the exact `comfyui-breeze-tts-T8` folder name so protected ComfyUI packages stay host-owned.

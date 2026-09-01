@@ -36,7 +36,10 @@ const state = {
   launchTimer: null,
   historyItems: [],
   historyPage: 1,
-  historyPageSize: 12
+  historyPageSize: 12,
+  selectedRecipe: "",
+  recipeBaseInstruction: "",
+  recipeAppliedInstruction: ""
 };
 
 const $ = (id) => document.getElementById(id);
@@ -61,6 +64,41 @@ const GENERATION_CONFLICT_IDS = [
 ];
 const VOICE_CONTROL_IDS = ["voiceSelect", "libraryVoiceSelect", "voiceName", "applyVoiceButton", "saveVoiceButton", "updateVoiceButton", "deleteVoiceButton", "refreshVoicesButton", "exportVoiceButton", "importVoiceButton"];
 const BATCH_CONTROL_IDS = ["batchKind", "batchInput", "analyzeRolesButton"];
+const CREATION_TEMPLATES = {
+  blank: { tab: "generate", mode: "design" },
+  narration: {
+    tab: "generate",
+    mode: "design",
+    text: "欢迎来到今天的内容。接下来，让我们用清晰自然的节奏，一起了解重点。",
+    instruction: "一位可靠、亲切的中文旁白，吐字清晰，语速自然，重点处适度停顿，适合短视频解说。"
+  },
+  audiobook: {
+    tab: "generate",
+    mode: "design",
+    text: "夜色渐深，窗外只剩下风吹过树叶的声音。她停下脚步，回头望向来时的路。",
+    instruction: "一位沉稳、有叙事感的中文讲述者，声音温暖，语速舒缓，句间留有自然呼吸和画面感。"
+  },
+  advertisement: {
+    tab: "generate",
+    mode: "design",
+    text: "现在出发，让每一次灵感都更快变成作品。",
+    instruction: "一位明快、自信、有感染力的中文广告配音，节奏紧凑，关键词有力度，结尾利落。"
+  },
+  dialogue: { tab: "dialogue", batchKind: "script" },
+  subtitle: { tab: "dialogue", batchKind: "srt" },
+  continue: { tab: "dialogue", draft: true }
+};
+const DIRECTION_RECIPES = {
+  calm: "平静、克制，情绪稳定",
+  warm: "温暖、亲切，带有自然的关怀感",
+  excited: "兴奋、有感染力，重点词更有能量",
+  tense: "紧张、警觉，保持适度压迫感",
+  sad: "悲伤、内敛，保留克制的呼吸和停顿",
+  whisper: "轻声、贴近耳语，但保持发音清楚",
+  documentary: "沉稳、客观，具有纪录片旁白的可信感"
+};
+const RECIPE_INTENSITY = { subtle: "情绪克制", natural: "情绪自然", strong: "情绪鲜明" };
+const RECIPE_PACE = { slow: "节奏舒缓", natural: "节奏自然", fast: "节奏紧凑" };
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -93,6 +131,71 @@ function setActionMessage(target, text, kind = "") {
   else element.setAttribute("role", "status");
 }
 
+function setGlobalTask({ kind = "idle", kicker = "工作台", title = "准备创作", detail = "选择生成模式或导入脚本开始。", progress = null, target = "", cancellable = false } = {}) {
+  const bar = $("globalTaskBar");
+  if (!bar) return;
+  bar.className = `global-task-bar ${kind}`;
+  bar.dataset.kind = kind;
+  bar.dataset.target = target;
+  $("globalTaskKicker").textContent = kicker;
+  $("globalTaskTitle").textContent = title;
+  $("globalTaskDetail").textContent = detail;
+  const progressElement = $("globalTaskProgress");
+  progressElement.hidden = progress === null;
+  if (progress === "indeterminate") progressElement.removeAttribute("value");
+  else if (progress !== null) progressElement.value = Math.max(0, Math.min(100, Number(progress) || 0));
+  $("globalTaskViewButton").hidden = !target;
+  $("globalTaskCancelButton").hidden = !cancellable;
+}
+
+function updateContinueDraftTemplate() {
+  const button = $("continueDraftTemplate");
+  if (!button) return;
+  let draft = null;
+  try {
+    const raw = localStorage.getItem(PROJECT_DRAFT_KEY);
+    if (raw) draft = JSON.parse(raw);
+  } catch (_) { /* 本地存储不可用时只禁用恢复入口。 */ }
+  const count = Array.isArray(draft?.project?.lines) ? draft.project.lines.length : 0;
+  button.disabled = count === 0;
+  const summary = button.querySelector("span");
+  if (summary) summary.textContent = count ? `恢复“${draft.project.name || "未命名工程"}” · ${count} 句` : "暂无可恢复的自动草稿";
+}
+
+function updateRecipeSelection() {
+  document.querySelectorAll(".recipe-chip").forEach((button) => {
+    const active = button.dataset.recipe === state.selectedRecipe;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+}
+
+function clearDirectionRecipe({ preserveInstruction = false } = {}) {
+  if (!preserveInstruction && state.recipeAppliedInstruction && $("instruction").value === state.recipeAppliedInstruction) {
+    $("instruction").value = state.recipeBaseInstruction;
+  }
+  state.selectedRecipe = "";
+  state.recipeBaseInstruction = "";
+  state.recipeAppliedInstruction = "";
+  updateRecipeSelection();
+  setActionMessage("directionRecipeStatus", "选择一个配方即可应用，可继续手动修改。");
+}
+
+function applyDirectionRecipe(recipeId = state.selectedRecipe) {
+  const recipe = DIRECTION_RECIPES[recipeId];
+  if (!recipe) return clearDirectionRecipe();
+  const current = $("instruction").value.trim();
+  const base = current === state.recipeAppliedInstruction ? state.recipeBaseInstruction : current;
+  state.selectedRecipe = recipeId;
+  state.recipeBaseInstruction = base;
+  const direction = `${recipe}，${RECIPE_INTENSITY[$("recipeIntensity").value]}，${RECIPE_PACE[$("recipePace").value]}，保持发音清晰并自然控制停顿。`;
+  state.recipeAppliedInstruction = base ? `${base}\n演绎要求：${direction}` : direction;
+  $("instruction").value = state.recipeAppliedInstruction;
+  updateRecipeSelection();
+  clearSelectedVoice("演绎配方已应用，当前切换为手动配置。");
+  setActionMessage("directionRecipeStatus", `已应用“${document.querySelector(`.recipe-chip[data-recipe="${recipeId}"]`)?.textContent || recipeId}”配方，可直接生成或继续修改。`, "success");
+}
+
 function updateProjectSaveState(text) {
   const indicator = $("projectSaveState");
   if (!indicator) return;
@@ -109,6 +212,7 @@ function persistProjectDraft() {
       project: state.dialogueProject
     }));
     updateProjectSaveState("有未保存修改 · 草稿已自动保存");
+    updateContinueDraftTemplate();
   } catch (error) {
     updateProjectSaveState(`有未保存修改 · 草稿保存失败：${errorMessage(error)}`);
   }
@@ -129,6 +233,7 @@ function clearProjectDraft() {
   window.clearTimeout(state.projectDraftTimer);
   state.projectDraftTimer = null;
   try { localStorage.removeItem(PROJECT_DRAFT_KEY); } catch (_) { /* 存储不可用时仍允许继续使用工程。 */ }
+  updateContinueDraftTemplate();
 }
 
 function markProjectSaved(message = "工程修改已保存") {
@@ -160,6 +265,7 @@ function restoreProjectDraft() {
     const time = draft.saved_at ? new Date(draft.saved_at).toLocaleString() : "上次退出前";
     updateProjectSaveState(`已恢复 ${time} 的自动草稿 · 尚未正式保存`);
     setActionMessage("batchStatus", `已恢复未保存工程“${draft.project.name || "未命名工程"}”，请确认后保存。`);
+    updateContinueDraftTemplate();
     return true;
   } catch (error) {
     clearProjectDraft();
@@ -220,12 +326,14 @@ function transformersCompatible(version) {
 
 function renderModel(report) {
   const summary = $("modelSummary");
+  const advanced = $("advancedLauncher");
   summary.classList.remove("ready-text");
   if (report.valid) {
     const license = report.license_accepted ? "许可证已确认" : "等待许可证确认";
     summary.textContent = `模型完整 · ${formatBytes(report.total_size)} · ${license} · revision ${report.revision.slice(0, 12)}`;
     summary.classList.add("ready-text");
     setStatus(report.license_accepted ? "ready" : "", report.license_accepted ? "环境与模型已就绪" : "请确认模型许可证");
+    $("advancedLauncherSummary").textContent = report.license_accepted ? "模型与许可证已就绪 · 需要时展开调整" : "模型完整 · 等待确认许可证";
   } else {
     const problems = [
       report.missing.length && `缺少 ${report.missing.length} 个文件`,
@@ -234,6 +342,11 @@ function renderModel(report) {
     ].filter(Boolean).join("；");
     summary.textContent = problems || "模型尚未安装。";
     setStatus("", "等待完整模型");
+    $("advancedLauncherSummary").textContent = "模型尚未就绪 · 展开完成配置";
+  }
+  if (advanced && !advanced.dataset.autoSet) {
+    advanced.open = !(report.valid && report.license_accepted);
+    advanced.dataset.autoSet = "true";
   }
 }
 
@@ -381,17 +494,23 @@ async function refresh() {
     }
   } catch (error) {
     setStatus("error", "本地服务异常");
-    $("modelSummary").textContent = error.message;
+    $("modelSummary").textContent = actionableError(error, "确认桌面后端正在运行，或重启应用后再试");
   }
 }
 
 function selectMode(mode) {
   state.mode = mode;
-  document.querySelectorAll(".mode-tab").forEach((button) => button.classList.toggle("active", button.dataset.mode === mode));
+  document.querySelectorAll(".mode-tab").forEach((button) => {
+    const active = button.dataset.mode === mode;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
   $("referenceField").hidden = mode === "design";
   $("instructionField").hidden = mode === "clone";
+  $("directionRecipePanel").hidden = mode === "clone";
+  $("instructionField").querySelector("label").textContent = mode === "direction" ? "本句演绎指令" : "音色设计与演绎指令";
   $("cfgScale").value = mode === "clone" ? "1" : "4";
-  if (mode === "clone") $("instruction").value = "Speak clearly and naturally.";
+  if (mode === "clone") clearDirectionRecipe();
 }
 
 async function fileToBase64(file) {
@@ -480,6 +599,14 @@ function stopScheduledAudio() {
   state.scheduledAudioTime = 0;
 }
 
+function cancelGeneration() {
+  stopScheduledAudio();
+  if (state.socket?.readyState === WebSocket.OPEN) state.socket.send(JSON.stringify({ type: "cancel" }));
+  else if (state.socket?.readyState === WebSocket.CONNECTING) state.socket.close();
+  $("generationStatus").textContent = "正在取消…";
+  setGlobalTask({ kind: "working", kicker: "单句生成", title: "正在停止任务", detail: "已发送取消请求，正在等待模型安全结束。", progress: "indeterminate", target: "generate" });
+}
+
 async function generate() {
   if (state.socket || state.generating || state.batching) return;
   if (state.downloading) throw new Error("模型正在下载／修复，请等待完成后再生成。");
@@ -532,16 +659,19 @@ async function generate() {
     state.scheduledAudioTime = 0;
     $("generationStatus").textContent = "正在准备模型…";
     $("generationMeta").textContent = "任务已提交；首次加载模型可能需要数十秒。";
+    setGlobalTask({ kind: "working", kicker: "单句生成", title: "正在准备模型", detail: "任务已提交；首次加载模型可能需要数十秒。", progress: "indeterminate", target: "generate", cancellable: true });
     socket.onopen = () => socket.send(JSON.stringify(payload));
   } catch (error) {
     state.generating = false;
     updateControlState();
+    setGlobalTask({ kind: "error", kicker: "单句生成", title: "无法开始生成", detail: errorMessage(error), target: "generate" });
     throw error;
   }
   socket.onmessage = (event) => {
     if (event.data instanceof ArrayBuffer) {
       schedulePcm(event.data, 24000);
       $("generationStatus").textContent = "正在流式生成和播放…";
+      setGlobalTask({ kind: "working", kicker: "单句生成", title: "正在生成并流式试听", detail: "可以切换分页查看其他内容，生成会继续进行。", progress: "indeterminate", target: "generate", cancellable: true });
       return;
     }
     const message = JSON.parse(event.data);
@@ -554,12 +684,15 @@ async function generate() {
       state.outputDirectory = message.metadata.output.replace(/[\\/][^\\/]+$/, "");
       $("generationMeta").textContent = JSON.stringify(message.metadata, null, 2);
       $("generationStatus").textContent = "生成完成";
+      setGlobalTask({ kind: "success", kicker: "单句生成", title: "生成完成", detail: `已保存 ${message.output}`, progress: 100, target: "generate" });
     } else if (message.type === "error") {
       $("generationStatus").textContent = `失败：${message.message}`;
       $("generationMeta").textContent = `${message.error_type}: ${message.message}`;
+      setGlobalTask({ kind: "error", kicker: "单句生成", title: "生成失败", detail: message.message, target: "generate" });
     } else if (message.type === "cancelled") {
       stopScheduledAudio();
       $("generationStatus").textContent = "已取消";
+      setGlobalTask({ kind: "idle", kicker: "单句生成", title: "任务已取消", detail: "可以修改文本或参数后重新生成。", target: "generate" });
     }
   };
   socket.onclose = () => {
@@ -571,6 +704,7 @@ async function generate() {
   socket.onerror = () => {
     stopScheduledAudio();
     $("generationStatus").textContent = "WebSocket 连接失败";
+    setGlobalTask({ kind: "error", kicker: "单句生成", title: "连接失败", detail: "本地生成服务连接中断，请返回设置与诊断检查服务。", target: "generate" });
   };
 }
 
@@ -711,6 +845,7 @@ function applySelectedVoice() {
   }
   state.selectedVoiceId = voice.id;
   selectMode(voice.mode);
+  clearDirectionRecipe({ preserveInstruction: true });
   $("instruction").value = voice.instruction || "";
   $("referenceText").value = voice.reference_text || "";
   $("referenceAudio").value = "";
@@ -734,6 +869,7 @@ function selectLibraryVoice() {
   state.selectedVoiceId = voice.id;
   $("voiceSelect").value = voice.id;
   selectMode(voice.mode);
+  clearDirectionRecipe({ preserveInstruction: true });
   $("instruction").value = voice.instruction || "";
   $("referenceText").value = voice.reference_text || "";
   $("voiceName").value = voice.name || "";
@@ -1099,6 +1235,7 @@ async function runBatchPayload(payload, { resumeJobId = "" } = {}) {
   $("batchResults").replaceChildren();
   $("batchProgress").value = 0;
   setActionMessage("batchStatus", resumeJobId ? "正在读取断点并继续任务…" : "正在整理批量任务…");
+  setGlobalTask({ kind: "working", kicker: "批量生成", title: resumeJobId ? "正在恢复断点" : "正在整理任务", detail: "任务会保存在队列中，可以切换到其他分页继续操作。", progress: "indeterminate", target: "dialogue", cancellable: true });
   let socket;
   try {
     const scheme = location.protocol === "https:" ? "wss" : "ws";
@@ -1108,6 +1245,7 @@ async function runBatchPayload(payload, { resumeJobId = "" } = {}) {
   } catch (error) {
     state.batching = false;
     updateControlState();
+    setGlobalTask({ kind: "error", kicker: "批量生成", title: "无法开始任务", detail: errorMessage(error), target: "dialogue" });
     throw error;
   }
   socket.onmessage = (event) => {
@@ -1120,24 +1258,33 @@ async function runBatchPayload(payload, { resumeJobId = "" } = {}) {
     if (message.type === "batch_start") {
       state.batchTotal = message.total;
       setActionMessage("batchStatus", `${resumeJobId ? "断点任务已继续" : "批量任务已开始"}，共 ${message.total} 项。${queueWarning ? ` ${queueWarning}` : ""}`);
+      setGlobalTask({ kind: "working", kicker: "批量生成", title: `正在生成 0/${message.total}`, detail: queueWarning || "批量任务已开始，可在工作台中继续浏览。", progress: 0, target: "dialogue", cancellable: true });
     } else if (message.type === "item_start") {
       setActionMessage("batchStatus", `正在生成 ${message.index + 1}/${message.total}${message.role ? ` · ${message.role}` : ""}`);
+      setGlobalTask({ kind: "working", kicker: "批量生成", title: `正在生成 ${message.index + 1}/${message.total}`, detail: message.role ? `当前角色：${message.role}` : "正在处理当前台词。", progress: message.total ? state.batchCompleted / message.total * 100 : "indeterminate", target: "dialogue", cancellable: true });
     } else if (message.type === "item_complete") {
       state.batchCompleted += 1;
       $("batchProgress").value = state.batchTotal ? state.batchCompleted / state.batchTotal * 100 : 0;
       appendBatchResult(message);
+      setGlobalTask({ kind: "working", kicker: "批量生成", title: `已完成 ${state.batchCompleted}/${state.batchTotal || "?"}`, detail: "结果已逐条保存，可随时查看已完成音频。", progress: state.batchTotal ? state.batchCompleted / state.batchTotal * 100 : "indeterminate", target: "dialogue", cancellable: true });
     } else if (message.type === "batch_complete") {
       $("batchProgress").value = 100;
       showMergedBatchOutput(message);
       const duration = message.merged_metadata?.duration_seconds;
       setActionMessage("batchStatus", `批量完成，共生成 ${message.results?.length || state.batchCompleted} 项${Number.isFinite(Number(duration)) ? ` · 合并总时长 ${formatDuration(duration)}` : ""}。`, "success");
+      setGlobalTask({ kind: "success", kicker: "批量生成", title: `已完成 ${message.results?.length || state.batchCompleted} 项`, detail: Number.isFinite(Number(duration)) ? `合并总时长 ${formatDuration(duration)}，结果已保存。` : "结果和合并音频已保存。", progress: 100, target: "dialogue" });
     } else if (message.type === "cancelled") {
       setActionMessage("batchStatus", `已取消；已完成 ${state.batchCompleted}/${state.batchTotal || "?"} 项。`);
+      setGlobalTask({ kind: "idle", kicker: "批量生成", title: "任务已取消", detail: `已保留 ${state.batchCompleted}/${state.batchTotal || "?"} 项结果和队列断点。`, target: "dialogue" });
     } else if (message.type === "error") {
       setActionMessage("batchStatus", `批量失败：${actionableError(message.message, "保留当前断点，前往任务队列继续")}`, "error");
+      setGlobalTask({ kind: "error", kicker: "批量生成", title: "任务中断", detail: `${message.message}；可从任务队列继续。`, target: "queue" });
     }
   };
-  socket.onerror = () => { setActionMessage("batchStatus", "批量连接失败。建议：确认本地服务仍在运行，然后从任务队列继续", "error"); };
+  socket.onerror = () => {
+    setActionMessage("batchStatus", "批量连接失败。建议：确认本地服务仍在运行，然后从任务队列继续", "error");
+    setGlobalTask({ kind: "error", kicker: "批量生成", title: "连接失败", detail: "当前进度已尽量保留，请从任务队列检查并继续。", target: "queue" });
+  };
   socket.onclose = () => {
     state.batchSocket = null;
     state.batching = false;
@@ -1187,6 +1334,42 @@ function cancelBatch() {
   if (state.batchSocket?.readyState === WebSocket.OPEN) state.batchSocket.send(JSON.stringify({ type: "cancel" }));
   else if (state.batchSocket?.readyState === WebSocket.CONNECTING) state.batchSocket.close();
   setActionMessage("batchStatus", "正在取消批量任务…");
+  setGlobalTask({ kind: "working", kicker: "批量生成", title: "正在停止任务", detail: "已完成结果与断点会保留。", progress: state.batchTotal ? state.batchCompleted / state.batchTotal * 100 : "indeterminate", target: "dialogue" });
+}
+
+function applyCreationTemplate(templateId) {
+  const template = CREATION_TEMPLATES[templateId] || CREATION_TEMPLATES.blank;
+  if (template.draft) {
+    if (!state.dialogueProject) restoreProjectDraft();
+    setActionMessage("batchStatus", state.dialogueProject?.lines?.length ? `已恢复“${state.dialogueProject.name || "未命名工程"}”，可从上次位置继续。` : "没有可恢复的自动草稿。");
+  } else if (template.tab === "dialogue") {
+    $("batchKind").value = template.batchKind;
+    updateBatchKind();
+    setActionMessage("batchStatus", template.batchKind === "srt" ? "请导入或粘贴 SRT，解析后即可编辑时间轴。" : "请粘贴“角色：台词”脚本，解析后映射音色。", "success");
+  } else if (templateId !== "blank") {
+    clearDirectionRecipe({ preserveInstruction: true });
+    selectMode(template.mode);
+    $("targetText").value = template.text;
+    $("instruction").value = template.instruction;
+    clearSelectedVoice("创作模板已载入，当前使用手动配置。");
+    setActionMessage("directionRecipeStatus", "模板已提供基础指令；可叠加演绎配方再生成。", "success");
+  }
+  showWorkspaceTab(template.tab);
+  const focusTarget = template.tab === "dialogue" ? $("batchInput") : $("targetText");
+  window.requestAnimationFrame(() => focusTarget?.focus());
+  setGlobalTask({ kind: "idle", kicker: "创作模板", title: templateId === "blank" ? "工作台已就绪" : "模板已载入", detail: template.tab === "dialogue" ? "导入或粘贴内容后，按步骤解析和生成。" : "修改文本和演绎要求后即可生成。", target: template.tab });
+}
+
+function workspaceTabKeydown(event) {
+  if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+  const tabs = [...document.querySelectorAll(".workspace-tab")];
+  const current = tabs.indexOf(event.currentTarget);
+  if (current < 0) return;
+  event.preventDefault();
+  const nextIndex = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (current + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+  const next = tabs[nextIndex];
+  showWorkspaceTab(next.dataset.tab);
+  next.focus();
 }
 
 function showWorkspaceTab(tab) {
@@ -1195,11 +1378,14 @@ function showWorkspaceTab(tab) {
     const active = button.dataset.tab === tab;
     button.classList.toggle("active", active);
     button.setAttribute("aria-selected", String(active));
+    button.tabIndex = active ? 0 : -1;
   });
   document.querySelectorAll(".tab-page").forEach((page) => {
     const active = page.dataset.page === tab;
     page.hidden = !active;
     page.classList.toggle("active", active);
+    if (active) page.removeAttribute("aria-hidden");
+    else page.setAttribute("aria-hidden", "true");
   });
   const activeButton = document.querySelector(`.workspace-tab[data-tab="${tab}"]`);
   activeButton?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
@@ -1208,11 +1394,18 @@ function showWorkspaceTab(tab) {
   if (tab === "dialogue") renderTimeline();
 }
 
-async function launchStudio() {
+async function launchStudio(templateId = "blank") {
   if (state.launching) return;
   state.launching = true;
   state.launchStartedAt = Date.now();
   $("startStudioButton").disabled = true;
+  document.querySelectorAll(".template-card").forEach((button) => { button.disabled = true; });
+  $("quickLaunchFeedback").hidden = false;
+  $("quickLaunchFeedback").classList.remove("error");
+  $("quickLaunchProgress").hidden = false;
+  $("quickLaunchProgress").removeAttribute("value");
+  $("quickLaunchStatus").textContent = "正在校验模型与许可证…";
+  $("quickLaunchElapsed").textContent = "已等待 0 秒";
   $("launchProgress").hidden = false;
   $("launchProgress").removeAttribute("value");
   $("launchElapsed").hidden = false;
@@ -1220,12 +1413,14 @@ async function launchStudio() {
   state.launchTimer = window.setInterval(() => {
     const seconds = Math.max(0, Math.floor((Date.now() - state.launchStartedAt) / 1000));
     $("launchElapsed").textContent = `已等待 ${seconds} 秒 · 正在加载模型，请不要关闭窗口`;
+    $("quickLaunchElapsed").textContent = `已等待 ${seconds} 秒 · 请不要关闭窗口`;
   }, 1000);
   $("launchStatus").textContent = "阶段 1/2：正在校验模型与许可证…";
   try {
     const model = state.diagnostics?.model;
     if (!model?.valid || !model?.license_accepted) await activateCurrentModel();
     $("launchStatus").textContent = "阶段 2/2：正在把模型加载到显存，首次启动可能需要几分钟…";
+    $("quickLaunchStatus").textContent = "正在把模型加载到显存，首次启动可能需要几分钟…";
     const runtime = await api("/api/runtime/load", {
       method: "POST",
       body: JSON.stringify({ fast_all: $("runtimeProfile").value === "fast", max_new_tokens: Number($("maxTokens").value) })
@@ -1233,10 +1428,15 @@ async function launchStudio() {
     $("launcherView").hidden = true;
     $("studioView").hidden = false;
     $("runtimeSummary").textContent = `${runtime.fast_all ? "Fast All" : "Eager"} · 24 kHz · 模型已加载`;
-    showWorkspaceTab("generate");
+    applyCreationTemplate(templateId);
+    $("quickLaunchFeedback").hidden = true;
     window.scrollTo({ top: 0, behavior: "smooth" });
   } catch (error) {
-    setActionMessage("launchStatus", `启动失败：${actionableError(error, "返回首页检查模型完整性、许可证和环境诊断后重试")}`, "error");
+    const message = `启动失败：${actionableError(error, "返回首页检查模型完整性、许可证和环境诊断后重试")}`;
+    setActionMessage("launchStatus", message, "error");
+    $("quickLaunchFeedback").classList.add("error");
+    $("quickLaunchProgress").hidden = true;
+    $("quickLaunchStatus").textContent = message;
   } finally {
     window.clearInterval(state.launchTimer);
     state.launchTimer = null;
@@ -1245,6 +1445,8 @@ async function launchStudio() {
     $("launchElapsed").hidden = true;
     state.launching = false;
     $("startStudioButton").disabled = false;
+    document.querySelectorAll(".template-card:not(.template-continue)").forEach((button) => { button.disabled = false; });
+    updateContinueDraftTemplate();
   }
 }
 
@@ -1258,6 +1460,7 @@ async function returnToLauncher() {
   await api("/api/runtime/unload", { method: "POST" });
   $("studioView").hidden = true;
   $("launcherView").hidden = false;
+  setGlobalTask();
   $("launchStatus").textContent = "模型显存已释放，可调整配置后重新启动。";
   await refresh();
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1728,9 +1931,13 @@ document.querySelectorAll(".mode-tab").forEach((button) => button.addEventListen
   clearSelectedVoice();
   selectMode(button.dataset.mode);
 }));
-document.querySelectorAll(".workspace-tab").forEach((button) => button.addEventListener("click", () => showWorkspaceTab(button.dataset.tab)));
+document.querySelectorAll(".workspace-tab").forEach((button) => {
+  button.addEventListener("click", () => showWorkspaceTab(button.dataset.tab));
+  button.addEventListener("keydown", workspaceTabKeydown);
+});
+document.querySelectorAll(".template-card").forEach((button) => button.addEventListener("click", () => launchStudio(button.dataset.template)));
 document.querySelectorAll(".link-button").forEach((button) => button.addEventListener("click", () => window.t8Desktop?.openExternal(button.dataset.url)));
-$('startStudioButton').addEventListener('click', launchStudio);
+$('startStudioButton').addEventListener('click', () => launchStudio());
 $('returnLauncherButton').addEventListener('click', () => returnToLauncher().catch((error) => { setActionMessage("runtimeSummary", actionableError(error, "停止当前生成或批量任务后重试"), "error"); }));
 for (const [id, kind] of [["openOutputButtonTop", "output"], ["openLogsButton", "logs"], ["openDataButton", "data"], ["settingsOpenOutputButton", "output"], ["settingsOpenLogsButton", "logs"], ["settingsOpenDataButton", "data"]]) $(id).addEventListener("click", () => openKnownPath(kind));
 $("refreshButton").addEventListener("click", refresh);
@@ -1780,15 +1987,7 @@ $("activateModelButton").addEventListener("click", () => activateCurrentModel().
 $("verifyModelButton").addEventListener("click", () => verifyCurrentModel().catch((error) => { $("downloadStatus").textContent = error.message; }));
 $("cancelDownloadButton").addEventListener("click", () => api("/api/models/download/cancel", { method: "POST" }).catch((error) => { $("downloadStatus").textContent = error.message; }));
 $("generateButton").addEventListener("click", () => generate().catch((error) => { $("generationStatus").textContent = error.message; }));
-$("cancelGenerateButton").addEventListener("click", () => {
-  stopScheduledAudio();
-  if (state.socket?.readyState === WebSocket.OPEN) {
-    state.socket.send(JSON.stringify({ type: "cancel" }));
-  } else if (state.socket?.readyState === WebSocket.CONNECTING) {
-    state.socket.close();
-  }
-  $("generationStatus").textContent = "正在取消…";
-});
+$("cancelGenerateButton").addEventListener("click", cancelGeneration);
 $("unloadButton").addEventListener("click", async () => {
   if (state.generating || state.batching) return;
   try {
@@ -1808,7 +2007,22 @@ $("exportDiagnosticsButton").addEventListener("click", async () => {
 });
 $("openOutputButton").addEventListener("click", () => state.outputDirectory && window.t8Desktop?.openPath(state.outputDirectory));
 $("viewLicenseButton").addEventListener("click", async () => { $("licenseText").textContent = await fetch("/api/license").then((response) => response.text()); $("licenseDialog").showModal(); });
-$("instruction").addEventListener("input", () => clearSelectedVoice());
+$("instruction").addEventListener("input", () => {
+  clearSelectedVoice();
+  if ($("instruction").value !== state.recipeAppliedInstruction && state.selectedRecipe) clearDirectionRecipe({ preserveInstruction: true });
+});
+document.querySelectorAll(".recipe-chip").forEach((button) => button.addEventListener("click", () => applyDirectionRecipe(button.dataset.recipe)));
+$("recipeIntensity").addEventListener("change", () => state.selectedRecipe && applyDirectionRecipe());
+$("recipePace").addEventListener("change", () => state.selectedRecipe && applyDirectionRecipe());
+$("clearDirectionRecipeButton").addEventListener("click", () => clearDirectionRecipe());
+$("globalTaskViewButton").addEventListener("click", () => {
+  const target = $("globalTaskBar").dataset.target;
+  if (target) showWorkspaceTab(target);
+});
+$("globalTaskCancelButton").addEventListener("click", () => {
+  if (state.batching) cancelBatch();
+  else if (state.generating) cancelGeneration();
+});
 $("referenceText").addEventListener("input", () => clearSelectedVoice());
 $("transcribeButton").addEventListener("click", () => transcribeReference().catch((error) => { $("whisperStatus").textContent = error.message; }));
 $("installWhisperButton").addEventListener("click", () => installWhisperComponent().catch((error) => { $("whisperStatus").textContent = error.message; }));
@@ -1963,7 +2177,10 @@ window.addEventListener("beforeunload", (event) => {
 });
 document.addEventListener("visibilitychange", () => { if (document.hidden) persistProjectDraft(); });
 
-refresh().finally(restoreProjectDraft);
+refresh().finally(() => {
+  restoreProjectDraft();
+  updateContinueDraftTemplate();
+});
 window.t8Desktop?.onUpdateStatus(renderUpdateStatus);
 window.t8Desktop?.updateStatus().then(renderUpdateStatus).catch((error) => { $("updateStatus").textContent = error.message; });
 selectMode("design");

@@ -16,9 +16,12 @@ Use 64-bit PowerShell on Windows:
 
 # Portable ZIP + large-package self-extracting EXE + release manifest/checksums
 .\packaging\build_release.ps1
+
+# GitHub Release: split the >2 GiB self-extractor into verified downloadable parts
+.\packaging\New-GitHubReleaseAssets.ps1
 ```
 
-The build creates a private portable CPython 3.10 runtime, installs official Breeze runtime requirements with PyTorch 2.9.1 CUDA 12.8, verifies exact versions, builds Electron, and writes SHA-256 checksums. Because the bundled CUDA runtime exceeds Squirrel's reliable embedded-Setup size, the release uses a verified 7-Zip self-extracting EXE and manual update manifest instead of publishing a broken Squirrel installer. The application downloads the fixed official model revision only after the user accepts the model license. Version 0.2.2 adds an IndexTTS 2.5-inspired light launcher/workbench, Voice Library 2.0, editable bidirectional dialogue timelines, native Breeze per-line direction controls, persistent history/queue recovery, secure project/voice bundles, hardened desktop logging, draft recovery, resilient Electron process shutdown, and verified checkpoint resume/merge while retaining long-text, Whisper, SRT, Fast/Eager, and opt-in HTTPS updates.
+The build creates a private portable CPython 3.10 runtime, installs official Breeze runtime requirements with PyTorch 2.9.1 CUDA 12.8, verifies exact versions, builds Electron, and writes SHA-256 checksums. Because the bundled CUDA runtime exceeds Squirrel's reliable embedded-Setup size, the release uses a verified 7-Zip self-extracting EXE and manual update manifest instead of publishing a broken Squirrel installer. The application downloads the fixed official model revision only after the user accepts the model license. Version 0.2.3 adds goal-based quick-start templates, reusable Breeze-native performance recipes, cross-page task feedback, responsive wrapped navigation, and keyboard-accessible workbench tabs while retaining Voice Library 2.0, editable timelines, per-line direction, history/queue recovery, secure bundles, long-text, Whisper, SRT, Fast/Eager, and Transformers 4.57.x/5.x compatibility.
 
 ## Install the ComfyUI nodes
 

@@ -1,6 +1,6 @@
 # comfyui-breeze-tts-T8
 
-非官方 Breeze TTS 2 ComfyUI 配套节点。v0.2.2 提供 8 个可组合节点：模型加载、声音设计、声音克隆、声音导演、桌面音色包、逐句情感、生成设置和音频生成。
+非官方 Breeze TTS 2 ComfyUI 配套节点。v0.2.3 提供 8 个可组合节点：模型加载、声音设计、声音克隆、声音导演、桌面音色包、逐句情感、生成设置和音频生成。
 
 ## 安装
 
@@ -90,4 +90,4 @@ Request 和 Settings 会在模型恢复到 GPU 之前验证。空台词、空逐
 - GitHub：<https://github.com/T8mars/Comfyui-breeze-tts>
 - Comfy Registry Publisher：`t8star`
 - Registry 节点 ID：`comfyui-breeze-tts-T8`
-- 当前版本：`0.2.2`
+- 当前版本：`0.2.3`

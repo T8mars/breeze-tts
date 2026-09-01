@@ -78,8 +78,32 @@ test("narrow screens retain usable controls and card-form timeline rows", () => 
   assert.match(css, /\.timeline-table td::before\s*\{\s*content:\s*attr\(data-label\)/);
   assert.match(css, /\.action-dock\s*\{\s*position:\s*static/);
   assert.doesNotMatch(css, /\.action-dock\s*\{[^}]*position:\s*fixed/);
-  assert.match(css, /\.studio-toolbar\s*\{\s*display:\s*flex;[^}]*overflow-x:\s*auto/);
+  assert.match(css, /\.studio-toolbar\s*\{[^}]*display:\s*grid/);
+  assert.match(css, /@media \(max-width: 760px\)[\s\S]*?\.workspace-tabs\s*\{[^}]*flex-wrap:\s*wrap/);
   assert.match(renderer, /cell\.dataset\.label = label/);
+});
+
+test("creation templates and direction recipes stay within Breeze capabilities", () => {
+  assert.match(html, /data-template="narration"/);
+  assert.match(html, /data-template="dialogue"/);
+  assert.match(html, /data-template="subtitle"/);
+  assert.match(html, /id="continueDraftTemplate"[^>]+disabled/);
+  assert.match(html, /id="quickLaunchFeedback"[^>]+aria-live="polite"[^>]+hidden/);
+  assert.match(renderer, /const CREATION_TEMPLATES =/);
+  assert.match(renderer, /function applyCreationTemplate/);
+  assert.match(renderer, /quickLaunchStatus/);
+  assert.match(renderer, /const DIRECTION_RECIPES =/);
+  assert.match(renderer, /演绎要求：\$\{direction\}/);
+  assert.doesNotMatch(renderer, /emotion_vector|duration_factor/);
+});
+
+test("global task feedback and keyboard tabs remain available across pages", () => {
+  assert.match(html, /id="globalTaskBar"[^>]+aria-live="polite"/);
+  assert.match(renderer, /function setGlobalTask/);
+  assert.match(renderer, /function workspaceTabKeydown/);
+  assert.match(renderer, /\["ArrowLeft", "ArrowRight", "Home", "End"\]/);
+  assert.match(renderer, /button\.tabIndex = active \? 0 : -1/);
+  assert.match(renderer, /globalTaskCancelButton/);
 });
 
 test("history and queue actions use explicit, consistent labels and retry states", () => {

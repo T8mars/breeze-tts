@@ -29,7 +29,8 @@ def main() -> int:
     try:
         manifest = json.loads((root / "manifests" / "desktop-runtime.json").read_text(encoding="utf-8"))
         lock = root / manifest["resolved_lock"]
-        lock_hash = hashlib.sha256(lock.read_bytes()).hexdigest()
+        lock_bytes = lock.read_bytes().replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+        lock_hash = hashlib.sha256(lock_bytes).hexdigest()
         if lock_hash != manifest["resolved_lock_sha256"]:
             errors.append(
                 f"runtime lock hash: expected {manifest['resolved_lock_sha256']}, got {lock_hash}"
