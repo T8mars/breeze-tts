@@ -773,7 +773,15 @@ def create_app(model_dir: Path | None = None) -> FastAPI:
 
     @app.get("/api/license", response_class=PlainTextResponse)
     def model_license() -> str:
-        return (project_root() / "MODEL_LICENSE").read_text(encoding="utf-8")
+        root = project_root()
+        candidates = (
+            root / "MODEL_LICENSE",
+            root / "comfyui-breeze-tts-T8" / "MODEL_LICENSE",
+        )
+        for candidate in candidates:
+            if candidate.is_file():
+                return candidate.read_text(encoding="utf-8")
+        raise HTTPException(status_code=503, detail="模型许可证文件缺失。")
 
     @app.get("/api/outputs/{filename}")
     def get_output(filename: str):

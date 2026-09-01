@@ -23,6 +23,7 @@ def test_health_and_license(monkeypatch, tmp_path):
         license_response = client.get("/api/license")
         assert license_response.status_code == 200
         assert "NON-COMMERCIAL" in license_response.text
+        assert "Version 1.1" in license_response.text
 
 
 def test_path_traversal_output_is_rejected(monkeypatch, tmp_path):

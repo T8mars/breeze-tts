@@ -65,7 +65,6 @@ if (Test-Path -LiteralPath (Join-Path $modelsStage 'Breeze-TTS-2')) {
 New-Item -ItemType Directory -Force -Path (Join-Path $backendStage 'desktop') | Out-Null
 Copy-Item -LiteralPath (Join-Path $desktopRoot 'src') -Destination (Join-Path $backendStage 'desktop') -Recurse -Force
 foreach ($file in @(
-    'MODEL_LICENSE',
     'LICENSE',
     'NOTICE',
     'THIRD_PARTY_NOTICES.md',
@@ -75,6 +74,10 @@ foreach ($file in @(
 )) {
     Copy-Item -LiteralPath (Join-Path $projectRoot $file) -Destination $backendStage -Force
 }
+Copy-Item `
+    -LiteralPath (Join-Path $projectRoot 'comfyui-breeze-tts-T8\MODEL_LICENSE') `
+    -Destination (Join-Path $backendStage 'MODEL_LICENSE') `
+    -Force
 
 $desktopManifest = Get-Content -LiteralPath (Join-Path $desktopRoot 'package.json') -Raw | ConvertFrom-Json
 $packageBaseName = "T8star-Aix-Voice-Studio-v$($desktopManifest.version)"
