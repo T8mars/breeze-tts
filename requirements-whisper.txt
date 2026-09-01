@@ -1,0 +1,2 @@
+# Optional subtitle transcription add-on. It is never installed by the core package.
+faster-whisper>=1.2,<2

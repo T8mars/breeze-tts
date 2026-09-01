@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' ws://127.0.0.1:*; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'" />
+    <title>T8star-Aix · Breeze TTS 2</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css?v=0.2.2" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="hero">
+        <div><span class="eyebrow">BREEZE TTS 2 · DESKTOP 0.2.2</span><h1>T8star-Aix · Breeze TTS 2</h1><p id="buildMeta" class="build-meta">正在读取版本信息…</p></div>
+        <div class="hero-copy"><p>中英双语 · 自然语言逐句演绎 · 本地生成</p><p class="credit">整合制作：B站 @T8star-Aix</p></div>
+      </header>
+
+      <section id="launcherView" class="view launcher-view">
+        <div class="section-title-row"><div><span class="step-label">启动首页</span><h2>准备本地语音工作台</h2><p>确认模型和环境后再进入功能分页；模型不会在应用启动时抢占显存。</p></div><div class="runtime-pill"><span id="statusDot" class="status-dot"></span><span id="statusText">正在连接本地服务</span></div></div>
+        <div class="launcher-grid">
+          <section class="panel setup-panel">
+            <div class="panel-heading"><div><span class="panel-kicker">01</span><strong>模型与输出</strong></div><button id="refreshButton" class="text-button">刷新</button></div>
+            <label for="modelPath">官方模型目录</label><div class="path-row"><input id="modelPath" autocomplete="off" /><button id="chooseModelButton" class="secondary">选择</button></div><p id="modelSummary" class="hint">正在检查模型清单…</p>
+            <label class="spaced-label" for="outputPath">语音输出目录</label><div class="path-row"><input id="outputPath" readonly /><button id="chooseOutputButton" class="secondary">选择</button></div><p id="outputStatus" class="hint">生成的 WAV、工程和元数据会保存到这里。</p>
+          </section>
+          <section class="panel setup-panel">
+            <div class="panel-heading"><div><span class="panel-kicker pink">02</span><strong>许可证与模型</strong></div></div>
+            <label class="checkbox-row"><input id="acceptLicense" type="checkbox" /><span>我已阅读并接受 BreezeBlue Research and Non-Commercial License</span></label>
+            <div class="button-grid"><button id="viewLicenseButton" class="secondary">查看完整协议</button><button id="activateModelButton" class="secondary">确认并启用</button><button id="verifyModelButton" class="secondary">完整校验</button><button id="downloadModelButton" class="secondary">下载／修复模型</button><button id="cancelDownloadButton" class="text-button" hidden>取消下载</button></div>
+            <progress id="downloadProgress" max="100" value="0" hidden></progress><p id="downloadStatus" class="hint">固定官方 revision，下载后校验 SHA-256。</p>
+          </section>
+          <section class="panel setup-panel">
+            <div class="panel-heading"><div><span class="panel-kicker blue">03</span><strong>运行方式</strong></div></div>
+            <div class="field"><label for="runtimeProfile">推理模式</label><select id="runtimeProfile"><option value="eager">Eager 安全模式（推荐）</option><option value="fast">Fast All 实验模式（24GB）</option></select></div>
+            <div class="field"><label for="maxTokens">最大音频帧</label><input id="maxTokens" type="number" min="64" max="1500" step="8" value="1500" /></div>
+            <p class="hint">Transformers 4.57.x 与 5.x 会由兼容层自动适配，不覆盖系统环境。</p><button id="startStudioButton" class="primary launch-button">启动 Breeze TTS 2</button><progress id="launchProgress" class="launch-progress" max="100" hidden></progress><p id="launchStatus" class="hint" aria-live="polite">模型就绪后进入工作台。</p><p id="launchElapsed" class="launch-elapsed" aria-live="off" hidden>已等待 0 秒</p>
+          </section>
+        </div>
+        <details class="fold-panel"><summary>环境诊断、扩展组件与更新</summary><div class="fold-content three-column">
+          <section><div class="panel-heading compact"><strong>环境诊断</strong><button id="exportDiagnosticsButton" class="text-button">导出</button></div><div id="diagnosticsGrid" class="diagnostics-grid"><div class="diagnostic pending">检测中…</div></div></section>
+          <section><div class="panel-heading compact"><strong>扩展能力</strong></div><div id="capabilitiesList" class="capability-list"><span class="capability pending">读取中…</span></div></section>
+          <section><div class="panel-heading compact"><strong>应用更新</strong></div><div class="row-actions"><button id="checkUpdateButton" class="secondary">检查更新</button><button id="installUpdateButton" class="primary" hidden>安装并重启</button></div><p id="updateStatus" class="hint">正在读取更新配置…</p></section>
+        </div></details>
+        <div class="reference-links"><button data-url="https://github.com/breezeblue-ai/breeze-tts" class="link-button">官方代码</button><button data-url="https://huggingface.co/BreezeBlue/Breeze-TTS-2" class="link-button">官方模型</button><button data-url="https://breeze.blue/" class="link-button">BreezeBlue</button></div>
+      </section>
+
+      <section id="studioView" class="view studio-view" hidden>
+        <div class="studio-toolbar"><button id="returnLauncherButton" class="secondary">返回启动配置（释放模型）</button><button id="openOutputButtonTop" class="secondary">打开输出目录</button><button id="openLogsButton" class="secondary">打开日志目录</button><button id="openDataButton" class="secondary">打开用户数据目录</button><span id="runtimeSummary" class="toolbar-status">Breeze 模型已加载</span></div>
+        <nav class="workspace-tabs" role="tablist" aria-label="工作台功能"><button class="workspace-tab active" role="tab" aria-selected="true" data-tab="generate">语音生成</button><button class="workspace-tab" role="tab" aria-selected="false" data-tab="voices">角色音色库</button><button class="workspace-tab" role="tab" aria-selected="false" data-tab="dialogue">多角色 / 批量 / SRT</button><button class="workspace-tab" role="tab" aria-selected="false" data-tab="history">生成历史</button><button class="workspace-tab" role="tab" aria-selected="false" data-tab="queue">任务队列</button><button class="workspace-tab" role="tab" aria-selected="false" data-tab="settings">设置与诊断</button></nav>
+
+        <section class="tab-page active" data-page="generate">
+          <div class="page-intro"><div><span class="step-label">单句与长文本</span><h2>语音生成</h2></div><p>Design / Clone / Direction 三种 Breeze 原生路径。</p></div>
+          <section class="panel generation-panel">
+            <div class="generation-topline"><nav class="mode-tabs" aria-label="生成模式"><button class="mode-tab active" data-mode="design">Voice Design</button><button class="mode-tab" data-mode="clone">Voice Clone</button><button class="mode-tab" data-mode="direction">Voice Direction</button></nav><div class="field compact-field"><label for="voiceSelect">复用音色</label><select id="voiceSelect"><option value="">手动配置</option></select></div></div>
+            <div class="form-grid">
+              <div class="field full"><label for="targetText">目标文本</label><textarea id="targetText" rows="7">[笑] 欢迎使用 Breeze TTS 2，让我们一起开始吧。</textarea></div>
+              <div id="instructionField" class="field full"><label for="instruction">音色／演绎指令</label><textarea id="instruction" rows="3">一位温柔自信的年轻女性，声音清晰，语气亲切，表达轻快而富有感染力。</textarea></div>
+              <div id="referenceField" class="reference-panel full" hidden><div class="field"><label for="referenceAudio">参考音频</label><input id="referenceAudio" type="file" accept=".wav,.flac,.ogg,.mp3,audio/wav,audio/flac,audio/ogg,audio/mpeg" /><p id="referenceAudioStatus" class="hint">支持 WAV / FLAC / OGG / MP3，最长 60 秒。</p><audio id="referencePreview" controls hidden></audio></div><div class="field"><label for="referenceText">参考音频准确逐字稿</label><textarea id="referenceText" rows="3" placeholder="必须与参考音频逐字一致"></textarea><div class="whisper-row"><select id="whisperModel"><option value="tiny">Whisper tiny</option><option value="base">Whisper base</option><option value="small" selected>Whisper small</option><option value="medium">Whisper medium</option><option value="large-v3">Whisper large-v3</option></select><input id="whisperLanguage" maxlength="12" placeholder="zh / en / 自动" /><button id="transcribeButton" class="secondary">Whisper 转写</button></div><p id="whisperStatus" class="hint">正在检查可选 Whisper 组件…</p><button id="installWhisperButton" class="text-button" hidden>安装 Whisper 组件</button></div></div>
+              <div class="field"><label for="cfgScale">指令遵循强度（CFG）</label><input id="cfgScale" type="number" min="0.1" max="10" step="0.1" value="4" /></div><div class="field"><label for="seed">Seed</label><input id="seed" type="number" min="0" max="2147483647" value="42" /></div>
+            </div>
+            <div class="event-tip">支持声学事件：<code>[笑]</code> <code>[咳嗽]</code> <code>[叹气]</code> · <code>(laugh)</code> <code>(cough)</code> <code>(sigh)</code></div>
+            <section class="output-panel"><div class="panel-heading compact"><strong>流式试听与最终结果</strong><span id="generationStatus">等待生成</span></div><audio id="outputAudio" controls></audio><div class="row-actions"><a id="downloadOutput" class="button-link" hidden download>下载 WAV</a><button id="openOutputButton" class="text-button" hidden>打开输出目录</button></div><pre id="generationMeta">尚无生成记录。</pre></section>
+          </section><div class="action-dock"><button id="generateButton" class="primary">生成语音</button><button id="cancelGenerateButton" class="danger" disabled>停止当前生成</button><button id="unloadButton" class="secondary">释放模型显存</button></div>
+        </section>
+
+        <section class="tab-page" data-page="voices" hidden>
+          <div class="page-intro"><div><span class="step-label">VOICE LIBRARY 2.0</span><h2>角色音色库</h2></div><p>稳定 ID、搜索收藏、标签备注、试听与安全音色包。</p></div>
+          <div class="voice-library-layout"><aside class="panel voice-browser"><div class="panel-heading"><strong>已保存音色</strong><button id="refreshVoicesButton" class="text-button">刷新</button></div><input id="voiceSearch" aria-label="搜索音色" placeholder="搜索名称、标签或备注" /><label class="checkbox-row small"><input id="favoriteOnly" type="checkbox" /><span>只看收藏</span></label><select id="libraryVoiceSelect" size="12" aria-label="音色列表"></select><div id="voiceEmptyState" class="compact-empty" hidden><strong>还没有可用音色</strong><span>填写右侧信息并点击“新建音色”，以后即可一键复用。</span></div></aside>
+            <section class="panel voice-editor"><div class="form-grid"><div class="field"><label for="voiceName">音色名称</label><input id="voiceName" maxlength="80" placeholder="例如：旁白 · 温柔女声" /></div><div class="field"><label for="voiceLanguage">默认语言</label><select id="voiceLanguage"><option value="auto">自动</option><option value="zh">中文</option><option value="en">English</option></select></div><div class="field full"><label for="voiceTags">标签</label><input id="voiceTags" placeholder="旁白, 温柔, 广告" /></div><div class="field full"><label for="voiceNotes">备注</label><textarea id="voiceNotes" rows="4" placeholder="项目适用范围、授权说明、录音条件…"></textarea></div><div class="field full"><label for="voicePreviewText">固定试听文本</label><textarea id="voicePreviewText" rows="3">你好，这是一段音色库试听。</textarea></div><label class="checkbox-row"><input id="voiceFavorite" type="checkbox" /><span>收藏此音色</span></label></div><div class="row-actions voice-actions"><button id="applyVoiceButton" class="secondary">应用到生成页</button><button id="saveVoiceButton" class="primary">新建音色</button><button id="updateVoiceButton" class="secondary">保存修改</button><button id="deleteVoiceButton" class="danger">删除</button><button id="exportVoiceButton" class="secondary">导出音色包</button><button id="importVoiceButton" class="secondary">导入音色包</button></div><p id="voiceStatus" class="hint">选择一个音色进行编辑或试听。</p></section>
+          </div>
+        </section>
+
+        <section class="tab-page" data-page="dialogue" hidden>
+          <div class="page-intro"><div><span class="step-label">可编辑时间轴</span><h2>多角色 / 批量 / SRT</h2></div><p>表格与轨道双向同步；逐句自然语言演绎，不伪装 Index 八维情感。</p></div>
+          <div class="step-strip"><strong>① 导入脚本</strong><span>→</span><strong>② 解析检查</strong><span>→</span><strong>③ 编辑、生成与下载</strong></div>
+          <section class="panel import-panel"><div class="defaults-bar"><label class="upload-button" for="scriptFileInput">导入 SRT / TXT / JSON<input id="scriptFileInput" type="file" accept=".srt,.txt,.json,text/plain,application/json" hidden /></label><div class="field"><label for="defaultRole">默认角色</label><input id="defaultRole" value="旁白" maxlength="80" /></div><div class="field"><label for="defaultLanguage">默认语言</label><select id="defaultLanguage"><option value="auto">自动</option><option value="zh">中文</option><option value="en">English</option></select></div></div><div class="import-toolbar"><div class="field"><label for="batchKind">脚本格式</label><select id="batchKind"><option value="items">普通批量</option><option value="script">多角色脚本</option><option value="srt">SRT 字幕</option><option value="txt">角色 | 台词 | 语言 | 演绎</option><option value="json">工程 JSON</option></select></div><div class="field batch-parse-field"><label>角色映射</label><button id="analyzeRolesButton" class="secondary" disabled>分析脚本角色</button></div><div class="field"><label for="timingPolicy">时长策略</label><select id="timingPolicy"><option value="preserve">保留完整语音并顺延</option><option value="overlay">保留开始时间并叠加</option><option value="strict">严格槽位（可能裁剪）</option></select></div><button id="parseDialogueButton" class="primary">解析并检查</button></div><label id="batchInputLabel" for="batchInput">批量或脚本内容</label><textarea id="batchInput" rows="7" placeholder="导入或粘贴台词内容"></textarea><p id="batchInputHint" class="hint">支持 SRT、TXT、JSON 和“角色：台词”；最多 500 句。</p><div id="roleMappingPanel" class="role-mapping-panel" aria-live="polite" hidden></div></section>
+          <section class="panel timeline-panel"><div class="timeline-toolbar"><div><strong>可编辑时间轴</strong><p id="timelineSummary" class="hint">尚未解析台词。</p><p id="projectSaveState" class="project-save-state" role="status" aria-live="polite">尚无未保存修改</p></div><div class="row-actions"><button id="addDialogueLineButton" class="secondary">新增一句</button><button id="saveProjectButton" class="secondary">保存工程</button><button id="importProjectButton" class="secondary">导入工程包</button><button id="exportProjectButton" class="secondary">导出工程包</button><button id="exportSrtButton" class="secondary">回写 SRT</button></div></div><p id="timelineHelp" class="sr-only">聚焦时间块后使用左右方向键移动；聚焦左右边缘手柄后使用方向键调整开始或结束时间；按住 Alt 可按一毫秒微调。</p><div id="timelineTrack" class="timeline-track" role="group" aria-label="台词时间轴"></div><div class="timeline-table-wrap"><table class="timeline-table"><thead><tr><th>序号</th><th>角色</th><th>音色</th><th>语言</th><th>开始 ms</th><th>结束 ms</th><th>台词</th><th>逐句演绎</th><th>操作</th></tr></thead><tbody id="timelineBody"></tbody></table></div></section>
+          <div class="batch-run-panel"><div><progress id="batchProgress" max="100" value="0"></progress><p id="batchStatus" class="hint" role="status" aria-live="polite">等待提交批量任务。</p></div><div><button id="batchStartButton" class="primary">生成全部 / 未完成句</button><button id="batchCancelButton" class="danger" disabled>取消批量</button></div></div><div id="batchResults" class="batch-results"></div>
+        </section>
+
+        <section class="tab-page" data-page="history" hidden><div class="page-intro"><div><span class="step-label">可追溯输出</span><h2>生成历史</h2></div><button id="refreshHistoryButton" class="secondary">刷新历史</button></div><div class="history-toolbar panel"><div class="field"><label for="historySearch">搜索文本或文件名</label><input id="historySearch" type="search" placeholder="输入关键词" /></div><div class="field"><label for="historyKind">任务类型</label><select id="historyKind"><option value="all">全部</option><option value="single">单句生成</option><option value="batch">批量 / 多角色</option></select></div><p id="historySummary" class="hint" role="status">正在读取历史…</p></div><div id="historyList" class="record-list" aria-live="polite"><p class="empty-state">正在读取历史…</p></div><div id="historyPagination" class="pagination" hidden><button id="historyPrevious" class="secondary">上一页</button><span id="historyPageStatus">第 1 页</span><button id="historyNext" class="secondary">下一页</button></div></section>
+        <section class="tab-page" data-page="queue" hidden><div class="page-intro"><div><span class="step-label">断点与恢复</span><h2>任务队列</h2></div><button id="refreshQueueButton" class="secondary">刷新队列</button></div><div id="queueList" class="record-list" aria-live="polite"><p class="empty-state">正在读取队列…</p></div></section>
+        <section class="tab-page" data-page="settings" hidden><div class="page-intro"><div><span class="step-label">兼容与诊断</span><h2>设置与诊断</h2></div><div class="row-actions"><button id="settingsRefreshDiagnosticsButton" class="secondary">刷新诊断</button><button id="copyDiagnosticsButton" class="secondary">复制诊断摘要</button></div></div><div class="settings-grid"><section class="panel settings-diagnostics"><strong>当前运行环境</strong><div id="settingsDiagnosticsGrid" class="diagnostics-grid settings-diagnostics-grid"><div class="diagnostic pending">检测中…</div></div><p id="settingsDiagnosticStatus" class="hint" role="status">诊断信息会自动脱敏。</p></section><section class="panel"><strong>兼容策略</strong><p>兼容 Transformers 4.57.x 与 5.x；独立环境不会覆盖 ComfyUI 的 Torch、Transformers、Tokenizers 或 NumPy。</p></section><section class="panel"><strong>能力边界</strong><p>Breeze 逐句控制使用自然语言 instruction 与 CFG，不提供 IndexTTS 八维向量、情感参考音频或 duration factor。</p></section><section class="panel"><strong>路径工具</strong><div class="button-grid"><button id="settingsOpenOutputButton" class="secondary">打开输出</button><button id="settingsOpenLogsButton" class="secondary">打开日志</button><button id="settingsOpenDataButton" class="secondary">打开用户数据</button></div></section></div></section>
+      </section>
+      <footer>非官方集成 · 请确保拥有参考声音的全部权利与许可 · BreezeBlue 模型仅限研究与非商业用途</footer>
+    </main>
+    <dialog id="licenseDialog"><form method="dialog"><button class="dialog-close">关闭</button></form><h2>BreezeBlue 模型许可证</h2><pre id="licenseText">正在读取…</pre></dialog>
+    <script src="renderer.js?v=0.2.2"></script>
+  </body>
+</html>

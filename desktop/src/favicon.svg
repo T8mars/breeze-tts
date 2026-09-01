@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="T8star-Aix Breeze TTS">
+  <defs>
+    <linearGradient id="g" x1="8" y1="8" x2="56" y2="56" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ff76a5"/>
+      <stop offset="1" stop-color="#6578e8"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="url(#g)"/>
+  <path d="M17 21h30v8H36v22h-9V29H17z" fill="#fff"/>
+  <circle cx="46" cy="45" r="5" fill="#fff" opacity=".9"/>
+</svg>

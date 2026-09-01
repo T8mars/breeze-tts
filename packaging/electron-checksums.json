@@ -1,0 +1,8 @@
+{
+  "43.3.0": {
+    "win32-x64": {
+      "file": "electron-v43.3.0-win32-x64.zip",
+      "sha256": "18528bedc6a9b04bdc5efb7b803cbc3cb0e5ea6415d54046e23d464d89a00da9"
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "platform": "win32-x64",
+  "python": {
+    "implementation": "CPython",
+    "version": "3.10.20",
+    "architecture": "64bit"
+  },
+  "pytorch_index": "https://download.pytorch.org/whl/cu128",
+  "critical_packages": {
+    "torch": "2.9.1+cu128",
+    "torchaudio": "2.9.1+cu128",
+    "transformers": "4.57.3",
+    "qwen-tts": "0.1.1",
+    "numpy": "2.2.6",
+    "soundfile": "0.14.0",
+    "fastapi": "0.141.1",
+    "uvicorn": "0.52.4",
+    "websockets": "16.1.1"
+  },
+  "resolved_lock": "requirements-desktop.lock.txt",
+  "resolved_lock_sha256": "9fbb6b62bfc200ba8e7ec1de0b3a5381cfd64b21033a52430e38e517597fdb90",
+  "runtime_size_bytes": 5413454032,
+  "verification": [
+    "packaging/verify_runtime.py",
+    "python -m pip check"
+  ]
+}

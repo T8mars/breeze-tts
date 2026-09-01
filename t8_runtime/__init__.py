@@ -1,0 +1,5 @@
+"""T8star-Aix integration runtime for Breeze TTS 2."""
+
+from .config import CORE_REVISION, MODEL_REPOSITORY, MODEL_REVISION, PROJECT_VERSION
+
+__all__ = ["CORE_REVISION", "MODEL_REPOSITORY", "MODEL_REVISION", "PROJECT_VERSION"]

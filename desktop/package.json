@@ -1,0 +1,32 @@
+{
+  "name": "t8star-aix-voice-studio",
+  "productName": "T8star-Aix Voice Studio",
+  "version": "0.2.2",
+  "description": "Unofficial Windows desktop integration for Breeze TTS 2",
+  "main": "src/main.js",
+  "author": "T8star-Aix",
+  "license": "Apache-2.0",
+  "private": true,
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "start": "electron-forge start",
+    "test": "node scripts/test-main-regressions.js && node scripts/test-workspace-ui.js && npm run verify:distribution",
+    "package": "electron-forge package",
+    "make": "electron-forge make --targets @electron-forge/maker-zip",
+    "make:portable": "electron-forge make --targets @electron-forge/maker-zip",
+    "verify": "node scripts/verify-package.js",
+    "verify:distribution": "node ../packaging/verify_forge_config.js"
+  },
+  "devDependencies": {
+    "@electron-forge/cli": "7.11.2",
+    "@electron-forge/maker-zip": "7.11.2",
+    "electron": "43.3.0"
+  },
+  "overrides": {
+    "extract-zip": "npm:@electron-internal/extract-zip@1.0.5",
+    "tar": "7.5.22",
+    "tmp": "0.2.7"
+  }
+}

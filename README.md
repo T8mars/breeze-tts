@@ -11,6 +11,13 @@
 > [!IMPORTANT]
 > Source code is licensed under Apache 2.0. Breeze TTS 2 model weights, derivative models, and self-hosted outputs are for research and non-commercial use only. See [License](#license-and-responsible-use).
 
+> [!NOTE]
+> This workspace also contains the unofficial **T8star-Aix Voice Studio** Windows portable integration and the user-requested `comfyui-breeze-tts-T8` node package. See [`T8_DISTRIBUTION.md`](T8_DISTRIBUTION.md) and [`roadmap.md`](roadmap.md). These additions are not affiliated with or endorsed by BreezeBlue.
+
+### T8star-Aix Voice Studio 0.2.2
+
+The Windows integration now uses an IndexTTS 2.5-inspired light launcher and functional workbench. It includes Voice Library 2.0, editable table/track timelines, per-line natural-language direction mapped to Breeze's native `instruction`/`cfg_scale`, SRT write-back, secure `.t8project.zip` and `.t8voice.zip` bundles, generation history, and a persistent recoverable queue. IndexTTS-only controls such as 8D emotion vectors, emotion-reference audio, `duration_factor`, CFM controls, and unsupported languages are deliberately not exposed as Breeze capabilities.
+
 ## 📰 News
 
 - **[2026.08.25]** 🎉 We open-source [Breeze TTS 2](https://huggingface.co/BreezeBlue/breeze-tts-2) model weights and the [PyTorch inference code](https://github.com/breezeblue-ai/breeze-tts).

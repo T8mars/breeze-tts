@@ -68,6 +68,8 @@ def _ref_audio_segment(
     }
     if request.get("ref_audio_path"):
         segment["audio_path"] = request["ref_audio_path"]
+    if request.get("ref_audio_codes") is not None:
+        segment["audio_codes"] = request["ref_audio_codes"]
     return segment
 
 
@@ -138,6 +140,12 @@ def _encode_prompt_audio(audio_tokenizer: Any, audio_path: str) -> torch.Tensor:
 def _resolve_segment_audio_codes(
     audio_tokenizer: Any, segment: Segment
 ) -> torch.Tensor:
+    cached = segment.get("audio_codes")
+    if cached is not None:
+        codes = torch.as_tensor(cached, dtype=torch.int16)
+        if codes.ndim != 2:
+            raise ValueError(f"Expected cached 2D audio codes, got shape {tuple(codes.shape)}")
+        return codes.cpu().contiguous()
     audio_path = segment.get("audio_path")
     if not audio_path:
         raise ValueError("Audio segment must include audio_path")

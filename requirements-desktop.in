@@ -1,0 +1,12 @@
+# Official Breeze TTS 2 runtime contract
+torch==2.9.1
+torchaudio==2.9.1
+qwen-tts==0.1.1
+transformers==4.57.3
+numpy>=2.0,<3
+soundfile>=0.13,<1
+fastapi>=0.115,<1
+uvicorn>=0.30,<1
+websockets>=15,<17
+python-multipart>=0.0.18,<1
+huggingface_hub>=0.34,<2

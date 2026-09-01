@@ -1,0 +1,24 @@
+{
+  "repo_id": "BreezeBlue/Breeze-TTS-2",
+  "revision": "c1c8ca18b70b30822735633991d9ebf4898e47d4",
+  "total_size": 7683635853,
+  "files": [
+    {"path": ".gitattributes", "size": 1570, "sha256": "34448b82c17d60fec9b65b1f093c115ddbaadc04beb1b0140b6bfed2e012a930"},
+    {"path": "LICENSE", "size": 18857, "sha256": "8b826c0957648ea1df2b870ba2627a93b502930c3ba40fa1af696cdfc2d2f0a3"},
+    {"path": "README.md", "size": 9539, "sha256": "1fed7a2a105e88c657da02c140249ed85449f957767b74e24282ed77509779d6"},
+    {"path": "assets/breezeblue-logo.png", "size": 27533, "sha256": "a4ccfb05960cca88569160218b618bc0a6d5993029aa5b5997ee4794f0093725"},
+    {"path": "assets/tts-elo-leaderboard.svg", "size": 60367, "sha256": "abd9a589b3e6c3a61c0ff9c584ed0d7ba8bfdd11b7fc77d7920b5f09ba2c642f"},
+    {"path": "audio_tokenizer/config.json", "size": 2336, "sha256": "ee65bb901c876664ab8707c487157aa1a6ee57c65969b28fb5ec9dc211e68167"},
+    {"path": "audio_tokenizer/configuration.json", "size": 76, "sha256": "6bc26d64eb5024b4d1dab5a52371958b429256d6c9d59787f1f5294a54e0cebd"},
+    {"path": "audio_tokenizer/model.safetensors", "size": 682293092, "sha256": "836b7b357f5ea43e889936a3709af68dfe3751881acefe4ecf0dbd30ba571258"},
+    {"path": "audio_tokenizer/preprocessor_config.json", "size": 234, "sha256": "fcb3805e597e786d4067706e602f6688524640f8d3396790e2e09b5942fcbdfb"},
+    {"path": "config.json", "size": 10161, "sha256": "57849eb756ca1602efe89afcc5c70379dd127f8deeb9f655204d4340190ea929"},
+    {"path": "generation_config.json", "size": 251, "sha256": "2ef3f2c0ab8d9ad241059138a795433c5410fd9954efb9625674ecd2a9529434"},
+    {"path": "model-00001-of-00002.safetensors", "size": 4961989890, "sha256": "abf813781256e10cbe81f2dbb415f897556225d4dfa0282d67aa8ea164e114a9"},
+    {"path": "model-00002-of-00002.safetensors", "size": 2004567152, "sha256": "36aa73b1a11361e1774db90d9c63c63303b294c022de112aa51904d940edcef1"},
+    {"path": "model.safetensors.index.json", "size": 109004, "sha256": "19977e3d96bb502ed3165b48adff094f6bd71ec3d349940d1a3ba6a0060bd5e3"},
+    {"path": "special_tokens_map.json", "size": 886, "sha256": "194f265bb588d142a16f27d9576104eb3dab3d7ba9961541d2d6e3d5e77e6470"},
+    {"path": "tokenizer.json", "size": 33386945, "sha256": "d3ec9ac3eb2392389b9f5112e85d8b43316494addb587ba7b7a9d61eac23af96"},
+    {"path": "tokenizer_config.json", "size": 1157960, "sha256": "2c084fd6725c2284e8aa6da095a8d036d48fe79665595bfcd50371821b620e44"}
+  ]
+}

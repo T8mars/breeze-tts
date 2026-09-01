@@ -1,0 +1,41 @@
+name: T8 integration CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  static-and-unit:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: python -m pip install pytest fastapi uvicorn httpx soundfile numpy huggingface_hub pydantic
+      - run: python -m compileall -q t8_runtime comfyui-breeze-tts-T8
+      - run: python -m pytest -q tests_t8/test_core.py tests_t8/test_server.py -m "not model"
+      - name: Run ComfyUI node tests
+        working-directory: comfyui-breeze-tts-T8
+        run: python -m pytest --confcutdir=tests tests -q
+      - run: node --check desktop/src/main.js
+      - run: node --check desktop/src/preload.js
+      - run: node --check desktop/src/renderer.js
+      - run: node --check desktop/scripts/verify-package.js
+      - name: Install locked desktop build tools
+        working-directory: desktop
+        run: npm ci
+      - name: Audit production and release toolchain
+        working-directory: desktop
+        shell: pwsh
+        run: |
+          npm audit --omit=dev
+          if ($LASTEXITCODE -ne 0) { throw 'Production dependency audit failed.' }
+          npm audit --audit-level=critical
+          if ($LASTEXITCODE -ne 0) { throw 'Critical build-tool vulnerability detected.' }
+      - name: Validate distribution configuration and manifests
+        shell: pwsh
+        run: .\packaging\Test-DistributionTools.ps1
