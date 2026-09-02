@@ -308,16 +308,19 @@ def _apply_voice_profile(payload: dict[str, Any]) -> tuple[dict[str, Any], Path 
 def _generation_request(payload: dict[str, Any], reference_path: Path | None) -> GenerationRequest:
     mode = str(payload.get("mode") or "design")
     default_cfg = 1.0 if mode == "clone" else 4.0
+    cfg_scale = payload.get("cfg_scale")
+    seed = payload.get("seed")
+    max_new_tokens = payload.get("max_new_tokens")
     return GenerationRequest(
         mode=mode,
         text=str(payload.get("text") or ""),
         instruction=str(payload.get("instruction") or DEFAULT_INSTRUCTION),
         ref_audio_path=reference_path,
         ref_text=str(payload.get("reference_text") or "") or None,
-        cfg_scale=float(payload.get("cfg_scale", default_cfg)),
-        seed=int(payload.get("seed", 42)),
+        cfg_scale=float(default_cfg if cfg_scale in {None, ""} else cfg_scale),
+        seed=int(42 if seed in {None, ""} else seed),
         fast_all=bool(payload.get("fast_all", False)),
-        max_new_tokens=int(payload.get("max_new_tokens", 1500)),
+        max_new_tokens=int(1500 if max_new_tokens in {None, ""} else max_new_tokens),
     )
 
 
@@ -908,12 +911,62 @@ def create_app(model_dir: Path | None = None) -> FastAPI:
         queue_job: dict[str, Any] | None = None
         current_line_key: int | str | None = None
         current_project_line_id = ""
+        latest_project: dict[str, Any] | None = None
+        remix_status = "not_requested"
+        remix_reason = "未关联已保存工程，返回的是本次任务合并结果。"
+        remix_output: str | None = None
+        project_attachment_failed = False
+        project_attachment_reason = ""
+        project_expected_revision: int | None = None
         try:
             received = json.loads(await websocket.receive_text())
             resume_job_id = str(received.get("resume_job_id") or "").strip()
             payload = queue_resume_payload(resume_job_id) if resume_job_id else received
+            project_id = str(payload.get("project_id") or "").strip()
+            raw_project_revision = payload.get("project_revision")
+            if project_id:
+                latest_project = load_project(project_id)
+                if latest_project is None:
+                    remix_status = "unavailable"
+                    remix_reason = "工程不存在或尚未保存，无法执行完整工程重混。"
+                elif raw_project_revision in {None, ""}:
+                    project_attachment_failed = True
+                    project_attachment_reason = (
+                        "请求缺少 project_revision；为避免覆盖已保存工程，本次仅执行 one-shot 生成。"
+                    )
+                    remix_status = "unavailable"
+                    remix_reason = project_attachment_reason
+                else:
+                    try:
+                        project_expected_revision = int(raw_project_revision)
+                    except (TypeError, ValueError):
+                        project_attachment_failed = True
+                        project_attachment_reason = (
+                            "请求中的 project_revision 无效；为避免覆盖已保存工程，"
+                            "本次仅执行 one-shot 生成。"
+                        )
+                        remix_status = "unavailable"
+                        remix_reason = project_attachment_reason
+                    else:
+                        remix_status = "pending"
+                        remix_reason = ""
             queue_job = queue_claim(payload, job_id=resume_job_id or None)
             all_items = _expand_batch(payload)
+            if (
+                project_id
+                and latest_project is not None
+                and any(not str(item.get("line_id") or "").strip() for item in all_items)
+            ):
+                missing_line_reason = (
+                    "关联已保存工程的批量项目必须全部提供 line_id；"
+                    "为避免错误回填，本次仅执行 one-shot 生成。"
+                )
+                project_attachment_failed = True
+                project_attachment_reason = (
+                    f"{project_attachment_reason} {missing_line_reason}".strip()
+                )
+                remix_status = "unavailable"
+                remix_reason = project_attachment_reason
             completed = set(queue_job.get("completed_lines") or [])
             indexed_items = [
                 (index, item)
@@ -952,6 +1005,12 @@ def create_app(model_dir: Path | None = None) -> FastAPI:
                         f"任务检查点缺少第 {index + 1} 句结果，无法安全恢复；请重新生成该任务。"
                     )
                 results.append(checkpoint_result)
+                checkpoint_project_revision = checkpoint_result.get("project_revision")
+                if (
+                    project_expected_revision is not None
+                    and checkpoint_project_revision not in {None, ""}
+                ):
+                    project_expected_revision = int(checkpoint_project_revision)
             await websocket.send_json({
                 "type": "batch_start", "total": len(indexed_items),
                 "original_total": len(all_items), "resumed": bool(completed),
@@ -993,18 +1052,22 @@ def create_app(model_dir: Path | None = None) -> FastAPI:
                     "line_id": current_project_line_id,
                 }
                 results.append(result)
-                project_id = str(payload.get("project_id") or "").strip()
-                if project_id and current_project_line_id:
+                if project_id and current_project_line_id and not project_attachment_failed:
                     try:
-                        record_project_line_result(
+                        latest_project = record_project_line_result(
                             project_id,
                             current_project_line_id,
                             status="completed",
                             audio_file=output_path.name,
                             metadata=metadata,
+                            expected_revision=project_expected_revision,
                         )
-                    except KeyError:
+                        project_expected_revision = latest_project["revision"]
+                        result["project_revision"] = project_expected_revision
+                    except (KeyError, ProjectRevisionConflict) as exc:
                         # Unsaved in-memory projects remain valid one-shot jobs.
+                        project_attachment_failed = True
+                        project_attachment_reason = str(exc).strip("'")
                         LOGGER.info("Batch line result belongs to an unsaved project %s", project_id)
                 queue_job = queue_checkpoint(queue_job["job_id"], current_line_key, result)
                 await websocket.send_json({"type": "item_complete", **result})
@@ -1012,13 +1075,30 @@ def create_app(model_dir: Path | None = None) -> FastAPI:
                     temporary.unlink(missing_ok=True)
                     temporary_paths.discard(temporary)
             results.sort(key=lambda value: int(value.get("index", 0)))
-            project_id = str(payload.get("project_id") or "").strip()
             remixed_project: dict[str, Any] | None = None
-            if project_id and load_project(project_id) is not None:
+            if project_id and latest_project is not None and not project_attachment_failed:
                 try:
-                    remixed_project = await asyncio.to_thread(remix_project, project_id)
-                except ValueError as exc:
+                    remixed_project = await asyncio.to_thread(
+                        remix_project,
+                        project_id,
+                        expected_revision=project_expected_revision,
+                    )
+                    latest_project = remixed_project["project"]
+                    remix_status = "completed"
+                    remix_output = remixed_project["output"]
+                    remix_reason = ""
+                except (KeyError, ValueError, ProjectRevisionConflict) as exc:
+                    latest_project = load_project(project_id)
+                    remix_status = "unavailable"
+                    remix_reason = str(exc)
                     LOGGER.info("Project %s is not yet fully remixable: %s", project_id, exc)
+            elif project_attachment_failed:
+                latest_project = load_project(project_id)
+                remix_status = "unavailable"
+                remix_reason = (
+                    "生成结果未能回填到工程台词，未执行完整工程重混："
+                    f"{project_attachment_reason or '台词不存在或工程 revision 已变化。'}"
+                )
             if remixed_project is not None:
                 merged_path = output_dir() / remixed_project["output"]
                 merged_metadata = remixed_project["metadata"]
@@ -1029,6 +1109,8 @@ def create_app(model_dir: Path | None = None) -> FastAPI:
                     timeline=bool(str(payload.get("srt_text") or "").strip()) or bool(payload.get("timeline")),
                     timing_policy=str(payload.get("timing_policy") or "preserve"),
                 )
+            if project_id:
+                latest_project = load_project(project_id)
             queue_job = queue_update(queue_job["job_id"], {"status": "completed", "error": ""})
             history_item = append_history({
                 "kind": "batch",
@@ -1045,10 +1127,24 @@ def create_app(model_dir: Path | None = None) -> FastAPI:
                     "merged_metadata": merged_metadata,
                     "history": history_item,
                     "job": queue_job,
-                    "project": remixed_project["project"] if remixed_project else None,
+                    "project": latest_project,
+                    "project_revision": latest_project["revision"] if latest_project else None,
+                    "full_project_mix": remix_status == "completed",
+                    "remix": {
+                        "status": remix_status,
+                        "reason": remix_reason,
+                        "output": remix_output,
+                    },
                 }
             )
         except InterruptedError:
+            project_id = str(locals().get("payload", {}).get("project_id") or "").strip()
+            latest_project = load_project(project_id) if project_id else None
+            cancelled_remix_status = "unavailable" if latest_project else "not_requested"
+            cancelled_remix_reason = (
+                "任务已取消，未执行完整工程重混。" if latest_project
+                else "未关联已保存工程，任务已取消。"
+            )
             if queue_job is not None:
                 try:
                     queue_job = queue_update(queue_job["job_id"], {
@@ -1062,6 +1158,14 @@ def create_app(model_dir: Path | None = None) -> FastAPI:
             try:
                 await websocket.send_json({
                     "type": "cancelled", "message": "批量生成已取消。", "job": queue_job,
+                    "project": latest_project,
+                    "project_revision": latest_project["revision"] if latest_project else None,
+                    "full_project_mix": False,
+                    "remix": {
+                        "status": cancelled_remix_status,
+                        "reason": cancelled_remix_reason,
+                        "output": None,
+                    },
                 })
             except Exception:
                 pass
@@ -1080,17 +1184,23 @@ def create_app(model_dir: Path | None = None) -> FastAPI:
         except Exception as exc:
             LOGGER.exception("Batch generation failed")
             project_id = str(locals().get("payload", {}).get("project_id") or "").strip()
-            if project_id and current_project_line_id:
+            if project_id and current_project_line_id and not project_attachment_failed:
                 try:
-                    record_project_line_result(
+                    latest_project = record_project_line_result(
                         project_id,
                         current_project_line_id,
                         status="failed",
                         error=str(exc),
                         error_type=type(exc).__name__,
+                        expected_revision=project_expected_revision,
                     )
-                except (KeyError, ProjectRevisionConflict):
+                except (KeyError, ProjectRevisionConflict) as attachment_exc:
+                    project_attachment_failed = True
+                    project_attachment_reason = str(attachment_exc).strip("'")
                     LOGGER.info("Could not attach failed line to project %s", project_id)
+                    latest_project = load_project(project_id)
+            elif project_id:
+                latest_project = load_project(project_id)
             if queue_job is not None:
                 try:
                     queue_job = queue_update(queue_job["job_id"], {
@@ -1105,6 +1215,20 @@ def create_app(model_dir: Path | None = None) -> FastAPI:
                         "type": "error", "message": str(exc),
                         "error_type": type(exc).__name__, "failed_line": current_line_key,
                         "job": queue_job,
+                        "project": latest_project,
+                        "project_revision": latest_project["revision"] if latest_project else None,
+                        "full_project_mix": False,
+                        "remix": {
+                            "status": "unavailable" if latest_project else "not_requested",
+                            "reason": (
+                                "当前单句生成失败，且失败状态未能回填到工程台词："
+                                f"{project_attachment_reason}"
+                                if project_attachment_failed else
+                                "当前单句生成失败，未执行完整工程重混。" if latest_project else
+                                "未关联已保存工程，且本次生成失败。"
+                            ),
+                            "output": None,
+                        },
                     }
                 )
             except Exception:

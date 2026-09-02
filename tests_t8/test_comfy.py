@@ -73,8 +73,8 @@ def _write_voice_bundle(path: Path, *, payload: bytes | None = None, digest: str
 def test_comfy_package_registers_eight_nodes():
     package_dir = ROOT / "comfyui-breeze-tts-T8"
     module = _load_package("comfyui_breeze_tts_T8_test")
-    assert module.__version__ == "0.2.3"
-    assert 'version = "0.2.3"' in (package_dir / "pyproject.toml").read_text(encoding="utf-8")
+    assert module.__version__ == "0.2.4"
+    assert 'version = "0.2.4"' in (package_dir / "pyproject.toml").read_text(encoding="utf-8")
     assert len(module.NODE_CLASS_MAPPINGS) == 8
     assert set(module.NODE_CLASS_MAPPINGS) == {
         "T8_BreezeTTS_ModelLoader",

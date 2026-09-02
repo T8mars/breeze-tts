@@ -99,6 +99,7 @@ def normalize_line(raw: dict[str, Any], order: int, *, cursor_ms: int = 0) -> di
         "dirty_fields": sorted({str(value) for value in raw.get("dirty_fields", [])}),
         "status": str(raw.get("status") or "pending"),
         "error": str(raw.get("error") or ""),
+        "error_type": str(raw.get("error_type") or "")[:200],
     }
 
 
@@ -134,7 +135,7 @@ def normalize_project(raw: dict[str, Any], *, increment_revision: bool = False) 
         "revision": revision,
         "name": str(raw.get("name") or "未命名对白工程").strip()[:120] or "未命名对白工程",
         "created_at": _integer(raw.get("created_at"), now),
-        "updated_at": now,
+        "updated_at": _integer(raw.get("updated_at"), now),
         "defaults": deepcopy(raw.get("defaults") if isinstance(raw.get("defaults"), dict) else {}),
         "timing": {
             "policy": policy,

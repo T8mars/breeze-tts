@@ -560,6 +560,7 @@ def record_project_line_result(
             )
             line["status"] = "completed"
             line["error"] = ""
+            line["error_type"] = ""
             completed.add(line_id)
             failed.discard(line_id)
             if isinstance(checkpoint.get("last_error"), dict) and checkpoint["last_error"].get("line_id") == line_id:
@@ -568,6 +569,7 @@ def record_project_line_result(
             message = str(error or "单句生成失败，但执行器没有提供错误详情。").strip()[:8_000]
             line["status"] = "failed"
             line["error"] = message
+            line["error_type"] = str(error_type or "UnknownLineFailure")[:200]
             failed.add(line_id)
             completed.discard(line_id)
             checkpoint["last_error"] = {
@@ -579,6 +581,7 @@ def record_project_line_result(
         else:
             line["status"] = "pending"
             line["error"] = ""
+            line["error_type"] = ""
             failed.discard(line_id)
         checkpoint.update({
             "completed_line_ids": sorted(completed),

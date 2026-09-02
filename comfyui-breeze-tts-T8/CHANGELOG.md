@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.4 — 2026-09-03
+
+- Aligns the node bundle with Voice Studio 0.2.4 and its reliable per-line rerun, backfill, and automatic timeline remix workflow.
+- Keeps all eight node contracts and the host-owned dependency policy unchanged; compatibility remains `transformers>=4.57,<6`.
+
 ## 0.2.3 — 2026-09-01
 
 - Aligns the node bundle with Voice Studio 0.2.3 and its quick-start, performance-recipe, responsive navigation, and global task-feedback release.

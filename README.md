@@ -14,9 +14,9 @@
 > [!NOTE]
 > This workspace also contains the unofficial **T8star-Aix Voice Studio** Windows portable integration and the user-requested `comfyui-breeze-tts-T8` node package. See [`T8_DISTRIBUTION.md`](T8_DISTRIBUTION.md) and [`roadmap.md`](roadmap.md). These additions are not affiliated with or endorsed by BreezeBlue.
 
-### T8star-Aix Voice Studio 0.2.3
+### T8star-Aix Voice Studio 0.2.4
 
-The Windows integration uses an IndexTTS 2.5-inspired light launcher and functional workbench. Version 0.2.3 adds goal-based quick-start templates, reusable natural-language performance recipes, visible cross-page generation progress, responsive wrapped navigation, and complete keyboard tab semantics. It retains Voice Library 2.0, editable table/track timelines, per-line natural-language direction mapped to Breeze's native `instruction`/`cfg_scale`, SRT write-back, secure `.t8project.zip` and `.t8voice.zip` bundles, generation history, and a persistent recoverable queue. IndexTTS-only controls such as 8D emotion vectors, emotion-reference audio, `duration_factor`, CFM controls, and unsupported languages are deliberately not exposed as Breeze capabilities.
+The Windows integration uses an IndexTTS 2.5-inspired light launcher and functional workbench. Version 0.2.4 completes the editable-timeline production loop: a per-line rerun first saves the project with revision checks, backfills the new clip, synchronizes line state, and automatically rebuilds the full timeline when every line has audio. Missing clips, failed reruns, stale audio, and concurrent project edits now have explicit safe states. Full-project generation saves first, generates only missing or generation-dirty lines, and timing-only edits remix without rerunning speech. It retains quick-start templates, Voice Library 2.0, per-line natural-language direction, SRT write-back, secure bundles, history, and a recoverable queue. IndexTTS-only controls such as 8D emotion vectors, emotion-reference audio, `duration_factor`, CFM controls, and unsupported languages are deliberately not exposed as Breeze capabilities.
 
 ## 📰 News
 

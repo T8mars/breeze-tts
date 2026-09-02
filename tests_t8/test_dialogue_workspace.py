@@ -68,6 +68,19 @@ def test_line_ids_survive_reorder_and_timeline_edit_checks_revision() -> None:
         apply_timeline_edit(project, line_id=ids[0], start_ms=0, end_ms=100, revision=2)
 
 
+def test_normalize_project_preserves_existing_timestamps() -> None:
+    project = normalize_project({
+        "created_at": 1_700_000_001,
+        "updated_at": 1_700_000_123,
+        "lines": [{"text": "时间戳保持稳定"}],
+    })
+
+    normalized_again = normalize_project(project)
+
+    assert normalized_again["created_at"] == 1_700_000_001
+    assert normalized_again["updated_at"] == 1_700_000_123
+
+
 def test_clone_override_routes_to_native_direction() -> None:
     line = normalize_project({"lines": [{"text": "台词", "direction_mode": "override", "direction_text": "低声悲伤"}]})["lines"][0]
     request = effective_generation(

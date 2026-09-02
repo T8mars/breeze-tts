@@ -17,6 +17,7 @@ const state = {
   selectedVoiceId: "",
   batchSocket: null,
   batching: false,
+  remixing: false,
   batchTotal: 0,
   batchCompleted: 0,
   batchRoles: [],
@@ -51,6 +52,10 @@ const PROJECT_DRAFT_DELAY_MS = 450;
 const TIMELINE_TRACK_RENDER_LIMIT = 120;
 const MIN_LINE_DURATION_MS = 50;
 const MAX_TIMELINE_MS = 24 * 60 * 60 * 1000;
+const LINE_GENERATION_DIRTY_FIELDS = new Set([
+  "text", "role", "voice_id", "language", "direction_mode", "direction_text",
+  "cfg_scale", "seed", "instruction", "reference"
+]);
 const GENERATION_CONFLICT_IDS = [
   "modelPath",
   "chooseModelButton",
@@ -309,7 +314,17 @@ function updateControlState() {
   $("downloadModelButton").disabled = generationBusy || state.downloading;
   $("cancelDownloadButton").disabled = generationBusy || !state.downloading;
   $("batchStartButton").disabled = generationBusy || state.downloading || state.capabilities.batch === false;
-  $("batchCancelButton").disabled = !state.batching;
+  $("batchCancelButton").disabled = !state.batching || state.remixing;
+  for (const id of ["parseDialogueButton", "scriptFileInput", "addDialogueLineButton", "saveProjectButton", "importProjectButton", "exportProjectButton", "exportSrtButton", "timingPolicy"]) {
+    const element = $(id);
+    if (element) element.disabled = state.batching;
+  }
+  for (const control of document.querySelectorAll('#timelineBody input, #timelineBody select, #timelineBody textarea, #timelineBody button')) control.disabled = state.batching;
+  for (const select of document.querySelectorAll('#roleMappingPanel select[data-role]')) select.disabled = state.batching;
+  for (const block of document.querySelectorAll('#timelineTrack .timeline-block')) block.tabIndex = state.batching ? -1 : 0;
+  for (const handle of document.querySelectorAll('#timelineTrack .timeline-handle')) handle.disabled = state.batching;
+  $("timelineTrack")?.setAttribute("aria-disabled", String(state.batching));
+  $("timelineTrack")?.classList.toggle("busy", state.batching);
   $("transcribeButton").disabled = generationBusy || state.transcribing || !state.capabilities.whisper;
   $("installWhisperButton").disabled = generationBusy || state.installingWhisper || state.whisperInstallComplete;
   $("checkUpdateButton").disabled = !state.updaterStatus.configured || ["checking", "downloading"].includes(state.updaterStatus.state);
@@ -1098,6 +1113,7 @@ function renderRoleMappings(roles) {
     name.className = "role-name";
     name.textContent = role;
     const select = document.createElement("select");
+    select.disabled = state.batching;
     select.dataset.role = role;
     const fallback = document.createElement("option");
     fallback.value = "";
@@ -1167,7 +1183,8 @@ function appendBatchResult(result) {
   const row = document.createElement("div");
   row.className = "batch-result";
   const label = document.createElement("span");
-  label.textContent = `#${Number(result.index) + 1}${result.role ? ` · ${result.role}` : ""}`;
+  const displayIndex = Number(result.subtitle?.index) || Number(result.index) + 1;
+  label.textContent = `第 ${displayIndex} 句${result.role ? ` · ${result.role}` : ""} · 最新结果`;
   const audio = document.createElement("audio");
   audio.controls = true;
   audio.src = `/api/outputs/${encodeURIComponent(result.output)}`;
@@ -1188,14 +1205,14 @@ function formatDuration(seconds) {
   return minutes ? `${minutes} 分 ${remainder} 秒` : `${remainder} 秒`;
 }
 
-function showMergedBatchOutput(message) {
+function showMergedBatchOutput(message, titleText = "合并总音频") {
   if (!message.merged_output) return;
   const panel = document.createElement("section");
   panel.className = "batch-merged";
   const heading = document.createElement("div");
   heading.className = "batch-merged-heading";
   const title = document.createElement("strong");
-  title.textContent = "合并总音频";
+  title.textContent = titleText;
   const meta = document.createElement("span");
   meta.textContent = `${message.merged_metadata?.item_count || state.batchCompleted} 项 · ${formatDuration(message.merged_metadata?.duration_seconds)}`;
   heading.append(title, meta);
@@ -1213,8 +1230,16 @@ function showMergedBatchOutput(message) {
   if (typeof output === "string") state.outputDirectory = output.replace(/[\\/][^\\/]+$/, "");
 }
 
-async function runBatchPayload(payload, { resumeJobId = "" } = {}) {
-  if (state.generating || state.batching || state.downloading) return;
+async function runBatchPayload(payload, { resumeJobId = "", singleLineId = "" } = {}) {
+  if (state.generating || state.batching || state.downloading) {
+    setActionMessage("batchStatus", state.batching ? "已有批量或单句任务正在运行；请等待完成或先停止当前任务。" : "当前有其他生成或下载任务，完成后再开始。", "error");
+    return;
+  }
+  const singleLineRun = Boolean(singleLineId);
+  state.batching = true;
+  state.batchTotal = 0;
+  state.batchCompleted = 0;
+  updateControlState();
   let queuedJob = resumeJobId ? { job_id: resumeJobId } : null;
   let queueWarning = "";
   if (!resumeJobId) {
@@ -1228,14 +1253,10 @@ async function runBatchPayload(payload, { resumeJobId = "" } = {}) {
       queueWarning = `任务队列暂不可用：${errorMessage(error)}；本次仍可生成，但关闭应用后不能断点恢复。`;
     }
   }
-  state.batching = true;
-  state.batchTotal = 0;
-  state.batchCompleted = 0;
-  updateControlState();
   $("batchResults").replaceChildren();
   $("batchProgress").value = 0;
-  setActionMessage("batchStatus", resumeJobId ? "正在读取断点并继续任务…" : "正在整理批量任务…");
-  setGlobalTask({ kind: "working", kicker: "批量生成", title: resumeJobId ? "正在恢复断点" : "正在整理任务", detail: "任务会保存在队列中，可以切换到其他分页继续操作。", progress: "indeterminate", target: "dialogue", cancellable: true });
+  setActionMessage("batchStatus", singleLineRun ? "工程已保存，正在准备重跑当前句…" : (resumeJobId ? "正在读取断点并继续任务…" : "正在整理批量任务…"));
+  setGlobalTask({ kind: "working", kicker: singleLineRun ? "单句重跑" : "批量生成", title: singleLineRun ? "正在准备当前句" : (resumeJobId ? "正在恢复断点" : "正在整理任务"), detail: singleLineRun ? "当前句成功后会尝试自动重混整条时间轴。" : "任务会保存在队列中，可以切换到其他分页继续操作。", progress: "indeterminate", target: "dialogue", cancellable: true });
   let socket;
   try {
     const scheme = location.protocol === "https:" ? "wss" : "ws";
@@ -1248,7 +1269,7 @@ async function runBatchPayload(payload, { resumeJobId = "" } = {}) {
     setGlobalTask({ kind: "error", kicker: "批量生成", title: "无法开始任务", detail: errorMessage(error), target: "dialogue" });
     throw error;
   }
-  socket.onmessage = (event) => {
+  socket.onmessage = async (event) => {
     let message;
     try { message = JSON.parse(event.data); }
     catch (_) {
@@ -1257,31 +1278,82 @@ async function runBatchPayload(payload, { resumeJobId = "" } = {}) {
     }
     if (message.type === "batch_start") {
       state.batchTotal = message.total;
-      setActionMessage("batchStatus", `${resumeJobId ? "断点任务已继续" : "批量任务已开始"}，共 ${message.total} 项。${queueWarning ? ` ${queueWarning}` : ""}`);
-      setGlobalTask({ kind: "working", kicker: "批量生成", title: `正在生成 0/${message.total}`, detail: queueWarning || "批量任务已开始，可在工作台中继续浏览。", progress: 0, target: "dialogue", cancellable: true });
+      setActionMessage("batchStatus", `${singleLineRun ? "当前句已进入生成队列" : (resumeJobId ? "断点任务已继续" : "批量任务已开始")}，共 ${message.total} 项。${queueWarning ? ` ${queueWarning}` : ""}`);
+      setGlobalTask({ kind: "working", kicker: singleLineRun ? "单句重跑" : "批量生成", title: `正在生成 0/${message.total}`, detail: queueWarning || (singleLineRun ? "请等待当前句生成，完成后会检查整条时间轴是否可重混。" : "批量任务已开始，可在工作台中继续浏览。"), progress: 0, target: "dialogue", cancellable: true });
     } else if (message.type === "item_start") {
+      const lineId = resolveBatchLineId(payload, message, singleLineId);
+      const line = state.dialogueProject?.lines?.find((item) => item.line_id === lineId);
+      if (line) { line.status = "running"; line.error = ""; refreshTimelineLineState(lineId); }
       setActionMessage("batchStatus", `正在生成 ${message.index + 1}/${message.total}${message.role ? ` · ${message.role}` : ""}`);
-      setGlobalTask({ kind: "working", kicker: "批量生成", title: `正在生成 ${message.index + 1}/${message.total}`, detail: message.role ? `当前角色：${message.role}` : "正在处理当前台词。", progress: message.total ? state.batchCompleted / message.total * 100 : "indeterminate", target: "dialogue", cancellable: true });
+      setGlobalTask({ kind: "working", kicker: singleLineRun ? "单句重跑" : "批量生成", title: `正在生成 ${message.index + 1}/${message.total}`, detail: message.role ? `当前角色：${message.role}` : "正在处理当前台词。", progress: message.total ? state.batchCompleted / message.total * 100 : "indeterminate", target: "dialogue", cancellable: true });
     } else if (message.type === "item_complete") {
       state.batchCompleted += 1;
       $("batchProgress").value = state.batchTotal ? state.batchCompleted / state.batchTotal * 100 : 0;
+      const lineId = resolveBatchLineId(payload, message, singleLineId);
+      const line = state.dialogueProject?.lines?.find((item) => item.line_id === lineId);
+      if (line) { line.status = "completed"; line.error = ""; line.audio_file = message.output || line.audio_file; refreshTimelineLineState(lineId); }
       appendBatchResult(message);
-      setGlobalTask({ kind: "working", kicker: "批量生成", title: `已完成 ${state.batchCompleted}/${state.batchTotal || "?"}`, detail: "结果已逐条保存，可随时查看已完成音频。", progress: state.batchTotal ? state.batchCompleted / state.batchTotal * 100 : "indeterminate", target: "dialogue", cancellable: true });
+      setGlobalTask({ kind: "working", kicker: singleLineRun ? "单句重跑" : "批量生成", title: `已完成 ${state.batchCompleted}/${state.batchTotal || "?"}`, detail: singleLineRun ? "当前句结果已保存，正在检查整条时间轴能否自动重混。" : "结果已逐条保存，可随时查看已完成音频。", progress: state.batchTotal ? state.batchCompleted / state.batchTotal * 100 : "indeterminate", target: "dialogue", cancellable: true });
     } else if (message.type === "batch_complete") {
       $("batchProgress").value = 100;
-      showMergedBatchOutput(message);
+      let syncedProject = null;
+      let syncError = "";
+      if (payload.project_id) {
+        try {
+          syncedProject = await syncDialogueProjectFromBatch(message.project, payload.project_id, singleLineId || state.selectedLineId);
+        } catch (error) {
+          syncError = errorMessage(error);
+        }
+      }
       const duration = message.merged_metadata?.duration_seconds;
-      setActionMessage("batchStatus", `批量完成，共生成 ${message.results?.length || state.batchCompleted} 项${Number.isFinite(Number(duration)) ? ` · 合并总时长 ${formatDuration(duration)}` : ""}。`, "success");
-      setGlobalTask({ kind: "success", kicker: "批量生成", title: `已完成 ${message.results?.length || state.batchCompleted} 项`, detail: Number.isFinite(Number(duration)) ? `合并总时长 ${formatDuration(duration)}，结果已保存。` : "结果和合并音频已保存。", progress: 100, target: "dialogue" });
+      const fullProjectMix = message.full_project_mix === true && message.remix?.status === "completed";
+      if (singleLineRun && fullProjectMix) {
+        showMergedBatchOutput(message, "整条时间轴（已自动重混）");
+        setActionMessage("batchStatus", `当前句结果已生成，整条时间轴已自动重混${Number.isFinite(Number(duration)) ? ` · 总时长 ${formatDuration(duration)}` : ""}。`, "success");
+        setGlobalTask({ kind: "success", kicker: "单句重跑", title: "当前句完成 · 时间轴已重混", detail: "下方当前句结果与整条时间轴总音频均已更新。", progress: 100, target: "dialogue" });
+      } else if (singleLineRun) {
+        const missing = projectMissingAudioLines(syncedProject);
+        const fallbackHint = missing.length
+          ? `还缺第 ${missing.slice(0, 5).map((line) => line.order).join("、")} 句${missing.length > 5 ? `等 ${missing.length} 句` : ""}音频`
+          : "仍有单句音频缺失或文件暂不可用";
+        const missingHint = String(message.remix?.reason || "").trim() || fallbackHint;
+        const syncHint = syncError ? ` 工程同步失败：${syncError}；请先点击“保存工程”后重试。` : "";
+        setActionMessage("batchStatus", `当前句结果已生成，但仅得到当前句结果；${missingHint}，暂不能重混整条时间轴。请点击缺失行的“生成该句”。${syncHint}`, "error");
+        setGlobalTask({ kind: "success", kicker: "单句重跑", title: "当前句已完成 · 时间轴尚未重混", detail: `${missingHint}；补齐后再次生成任一句即可自动重混。`, progress: 100, target: "dialogue" });
+      } else {
+        showMergedBatchOutput(message, payload.project_id && !fullProjectMix ? "本次任务合并结果（非完整工程重混）" : "合并总音频");
+        const syncHint = syncError ? ` 工程同步失败：${syncError}；编辑前请重新导入或刷新工程。` : "";
+        setActionMessage("batchStatus", `批量完成，共生成 ${message.results?.length || state.batchCompleted} 项${Number.isFinite(Number(duration)) ? ` · 合并总时长 ${formatDuration(duration)}` : ""}。${syncHint}`, syncError ? "error" : "success");
+        setGlobalTask({ kind: syncError ? "error" : "success", kicker: "批量生成", title: `已完成 ${message.results?.length || state.batchCompleted} 项`, detail: syncError || (Number.isFinite(Number(duration)) ? `合并总时长 ${formatDuration(duration)}，结果已保存。` : "结果和合并音频已保存。"), progress: 100, target: "dialogue" });
+      }
     } else if (message.type === "cancelled") {
+      if (message.project) {
+        try { await syncDialogueProjectFromBatch(message.project, payload.project_id, singleLineId || state.selectedLineId); } catch (_) { /* 保留取消提示和当前页面。 */ }
+      }
+      const line = state.dialogueProject?.lines?.find((item) => item.line_id === singleLineId);
+      if (line) { line.status = "pending"; line.error = "本次重跑已取消，可再次生成。"; refreshTimelineLineState(singleLineId); }
       setActionMessage("batchStatus", `已取消；已完成 ${state.batchCompleted}/${state.batchTotal || "?"} 项。`);
-      setGlobalTask({ kind: "idle", kicker: "批量生成", title: "任务已取消", detail: `已保留 ${state.batchCompleted}/${state.batchTotal || "?"} 项结果和队列断点。`, target: "dialogue" });
+      setGlobalTask({ kind: "idle", kicker: singleLineRun ? "单句重跑" : "批量生成", title: "任务已取消", detail: `已保留 ${state.batchCompleted}/${state.batchTotal || "?"} 项结果和队列断点。`, target: "dialogue" });
     } else if (message.type === "error") {
+      const lineId = resolveBatchLineId(payload, message, singleLineId);
+      const line = state.dialogueProject?.lines?.find((item) => item.line_id === lineId);
+      if (line) { line.status = "failed"; line.error = message.message || "单句生成失败。"; refreshTimelineLineState(lineId); }
+      if (singleLineRun && payload.project_id) {
+        try { await syncDialogueProjectFromBatch(message.project, payload.project_id, singleLineId); } catch (_) { /* 保留当前明确失败状态。 */ }
+      }
       setActionMessage("batchStatus", `批量失败：${actionableError(message.message, "保留当前断点，前往任务队列继续")}`, "error");
-      setGlobalTask({ kind: "error", kicker: "批量生成", title: "任务中断", detail: `${message.message}；可从任务队列继续。`, target: "queue" });
+      setGlobalTask({ kind: "error", kicker: singleLineRun ? "单句重跑" : "批量生成", title: singleLineRun ? "当前句生成失败" : "任务中断", detail: `${message.message}；${singleLineRun ? "请检查该句音色与演绎设置后重试。" : "可从任务队列继续。"}`, target: singleLineRun ? "dialogue" : "queue" });
     }
   };
   socket.onerror = () => {
+    if (singleLineRun) {
+      const line = state.dialogueProject?.lines?.find((item) => item.line_id === singleLineId);
+      if (line && line.status === "running") {
+        line.status = "failed";
+        line.error = "本地生成连接中断；请确认服务正常后重试。";
+        refreshTimelineLineState(singleLineId);
+      }
+    }
     setActionMessage("batchStatus", "批量连接失败。建议：确认本地服务仍在运行，然后从任务队列继续", "error");
     setGlobalTask({ kind: "error", kicker: "批量生成", title: "连接失败", detail: "当前进度已尽量保留，请从任务队列检查并继续。", target: "queue" });
   };
@@ -1300,10 +1372,51 @@ async function resumeBatchJob(jobId) {
   await runBatchPayload({}, { resumeJobId: jobId });
 }
 
+function lineNeedsGeneration(line) {
+  const dirtyFields = Array.isArray(line?.dirty_fields) ? line.dirty_fields : [];
+  return !String(line?.audio_file || "").trim()
+    || line?.status !== "completed"
+    || dirtyFields.some((field) => LINE_GENERATION_DIRTY_FIELDS.has(String(field)));
+}
+
+async function remixCompletedDialogueProject(project) {
+  const selectedLineId = state.selectedLineId;
+  state.batching = true;
+  state.remixing = true;
+  updateControlState();
+  $("batchResults").replaceChildren();
+  $("batchProgress").removeAttribute("value");
+  setActionMessage("batchStatus", "所有台词已有最新语音，无需重新生成；正在按当前时间轴直接重混…");
+  setGlobalTask({ kind: "working", kicker: "时间轴重混", title: "正在重混完整工程", detail: "不会重新推理语音，只按当前时间与间隔设置合成总音频。", progress: "indeterminate", target: "dialogue" });
+  try {
+    const result = await api(`/api/projects/${encodeURIComponent(project.project_id)}/remix`, {
+      method: "POST",
+      body: JSON.stringify({ expected_revision: state.projectBaseRevision })
+    });
+    await syncDialogueProjectFromBatch(result.project, project.project_id, selectedLineId);
+    $("batchProgress").value = 100;
+    showMergedBatchOutput({ merged_output: result.output, merged_metadata: result.metadata }, "整条时间轴（已直接重混）");
+    setActionMessage("batchStatus", "所有台词均为最新结果，无需重生成；整条时间轴已直接重混。", "success");
+    setGlobalTask({ kind: "success", kicker: "时间轴重混", title: "完整工程重混完成", detail: "未重新生成单句，已更新总音频。", progress: 100, target: "dialogue" });
+    return result;
+  } catch (error) {
+    setGlobalTask({ kind: "error", kicker: "时间轴重混", title: "无法重混完整工程", detail: errorMessage(error), target: "dialogue" });
+    throw error;
+  } finally {
+    state.remixing = false;
+    state.batching = false;
+    updateControlState();
+  }
+}
+
 async function startBatch() {
-  const defaults = await currentBatchDefaults();
   if (state.dialogueProject?.lines?.length) {
-    const items = state.dialogueProject.lines.map((line) => ({
+    await ensureDialogueProjectSaved();
+    const project = state.dialogueProject;
+    const linesToGenerate = project.lines.filter(lineNeedsGeneration);
+    if (!linesToGenerate.length) return remixCompletedDialogueProject(project);
+    const defaults = await currentBatchDefaults();
+    const items = linesToGenerate.map((line) => ({
       text: line.text,
       role: line.role,
       voice_id: line.voice_id || defaults.voice_id,
@@ -1314,8 +1427,9 @@ async function startBatch() {
       subtitle: { index: line.order, start_ms: line.start_ms, end_ms: line.end_ms, text: line.text },
       line_id: line.line_id
     }));
-    return runBatchPayload({ defaults, items, timeline: true, timing_policy: state.dialogueProject.timing?.policy || "preserve", project_id: state.dialogueProject.project_id });
+    return runBatchPayload({ defaults, items, timeline: true, timing_policy: project.timing?.policy || "preserve", project_id: project.project_id, project_revision: state.projectBaseRevision });
   }
+  const defaults = await currentBatchDefaults();
   const text = $("batchInput").value.trim();
   if (!text) throw new Error("批量输入不能为空。");
   const selectedKind = $("batchKind").value;
@@ -1477,6 +1591,7 @@ function openKnownPath(kind) {
 
 function lineVoiceSelect(line) {
   const select = document.createElement("select");
+  select.disabled = state.batching;
   select.dataset.field = "voice_id";
   select.setAttribute("aria-label", `第 ${line.order} 句音色`);
   const manual = document.createElement("option");
@@ -1491,6 +1606,7 @@ function fieldInput(line, field, type = "text") {
   const input = document.createElement(type === "textarea" ? "textarea" : "input");
   if (input instanceof HTMLInputElement) input.type = type;
   input.dataset.field = field;
+  input.disabled = state.batching;
   input.value = line[field] ?? "";
   const labels = { role: "角色", start_ms: "开始时间", end_ms: "结束时间", text: "台词", direction_text: "演绎指令" };
   input.setAttribute("aria-label", `第 ${line.order} 句${labels[field] || field}`);
@@ -1547,6 +1663,95 @@ function tableCell(label, ...children) {
   return cell;
 }
 
+function lineStatusLabel(status) {
+  return ({ pending: "等待生成", running: "正在生成", completed: "生成完成", failed: "生成失败" })[status] || "等待生成";
+}
+
+function lineResultView(line) {
+  const wrapper = document.createElement("div");
+  const status = ["pending", "running", "completed", "failed"].includes(line.status) ? line.status : "pending";
+  wrapper.className = `line-result-state ${status}`;
+  const badge = document.createElement("span");
+  badge.className = "line-status-badge";
+  badge.textContent = lineStatusLabel(status);
+  wrapper.append(badge);
+  if (line.error) {
+    const error = document.createElement("span");
+    error.className = "line-result-error";
+    error.textContent = line.error;
+    error.title = line.error;
+    wrapper.append(error);
+  }
+  if (line.audio_file) {
+    const audioLabel = document.createElement("span");
+    audioLabel.className = "line-audio-label";
+    audioLabel.textContent = status === "completed"
+      ? "最新音频"
+      : (status === "failed" ? "上次成功音频（本次失败）" : "上次成功音频（等待本次结果）");
+    const audio = document.createElement("audio");
+    audio.controls = true;
+    audio.preload = "metadata";
+    audio.setAttribute("aria-label", `第 ${line.order} 句${audioLabel.textContent}`);
+    audio.src = `/api/outputs/${encodeURIComponent(line.audio_file)}`;
+    const download = document.createElement("a");
+    download.className = "line-audio-download";
+    download.href = audio.src;
+    download.download = "";
+    download.textContent = "下载 WAV";
+    wrapper.append(audioLabel, audio, download);
+  }
+  return wrapper;
+}
+
+function refreshTimelineLineState(lineId) {
+  const line = state.dialogueProject?.lines?.find((item) => item.line_id === lineId);
+  if (!line) return;
+  const row = [...$("timelineBody").querySelectorAll("tr")].find((item) => item.dataset.lineId === lineId);
+  if (row) {
+    row.dataset.status = line.status || "pending";
+    const cell = row.querySelector(".line-result-cell");
+    if (cell) cell.replaceChildren(lineResultView(line));
+  }
+  const block = $("timelineTrack").querySelector(`.timeline-block[data-line-id="${lineId}"]`);
+  if (block) block.dataset.status = line.status || "pending";
+}
+
+function resolveBatchLineId(payload, message, singleLineId = "") {
+  if (message?.line_id) return String(message.line_id);
+  if (singleLineId) return singleLineId;
+  const index = Number(message?.index);
+  return Number.isInteger(index) ? String(payload?.items?.[index]?.line_id || "") : "";
+}
+
+function projectMissingAudioLines(project) {
+  return (project?.lines || []).filter((line) => !String(line.audio_file || "").trim());
+}
+
+async function syncDialogueProjectFromBatch(messageProject, projectId, selectedLineId) {
+  let project = messageProject;
+  if (!project && projectId) project = await api(`/api/projects/${encodeURIComponent(projectId)}`);
+  if (!project?.project_id || !Array.isArray(project.lines)) return null;
+  state.dialogueProject = project;
+  state.projectBaseRevision = project.revision;
+  state.selectedLineId = project.lines.some((line) => line.line_id === selectedLineId)
+    ? selectedLineId
+    : (project.lines[0]?.line_id || "");
+  $("timingPolicy").value = project.timing?.policy || "preserve";
+  renderRoleMappings(project.lines.map((line) => line.role));
+  markProjectSaved(`生成结果已同步 · revision ${project.revision}`);
+  renderTimeline();
+  return project;
+}
+
+async function ensureDialogueProjectSaved() {
+  if (!state.dialogueProject) throw new Error("当前没有可保存的工程。");
+  if (state.projectBaseRevision === null || state.projectDirty) {
+    setActionMessage("batchStatus", "单句重跑前正在可靠保存工程与未保存修改…");
+    await saveDialogueProject();
+  }
+  return state.dialogueProject;
+}
+
 function renderTimeline() {
   const project = state.dialogueProject;
   const body = $("timelineBody");
@@ -1563,10 +1768,12 @@ function renderTimeline() {
   for (const line of project.lines) {
     const row = document.createElement("tr");
     row.dataset.lineId = line.line_id;
+    row.dataset.status = line.status || "pending";
+    row.classList.toggle("selected", state.selectedLineId === line.line_id);
     const indexCell = tableCell("序号", document.createTextNode(String(line.order)));
     const roleCell = tableCell("角色", fieldInput(line, "role"));
     const voiceCell = tableCell("音色", lineVoiceSelect(line));
-    const language = document.createElement("select"); language.dataset.field = "language"; language.setAttribute("aria-label", `第 ${line.order} 句语言`);
+    const language = document.createElement("select"); language.dataset.field = "language"; language.disabled = state.batching; language.setAttribute("aria-label", `第 ${line.order} 句语言`);
     for (const [value, label] of [["auto", "自动"], ["zh", "中文"], ["en", "EN"]]) { const option = document.createElement("option"); option.value = value; option.textContent = label; option.selected = line.language === value; language.append(option); }
     const languageCell = tableCell("语言", language);
     const startInput = fieldInput(line, "start_ms", "number"); startInput.min = "0"; startInput.max = String(MAX_TIMELINE_MS - MIN_LINE_DURATION_MS); startInput.step = String(timelineSnapMs());
@@ -1574,13 +1781,14 @@ function renderTimeline() {
     const startCell = tableCell("开始 ms", startInput);
     const endCell = tableCell("结束 ms", endInput);
     const textCell = tableCell("台词", fieldInput(line, "text", "textarea"));
-    const directionMode = document.createElement("select"); directionMode.dataset.field = "direction_mode"; directionMode.setAttribute("aria-label", `第 ${line.order} 句演绎模式`);
+    const directionMode = document.createElement("select"); directionMode.dataset.field = "direction_mode"; directionMode.disabled = state.batching; directionMode.setAttribute("aria-label", `第 ${line.order} 句演绎模式`);
     for (const [value, label] of [["inherit", "继承音色"], ["override", "逐句覆盖"], ["neutral", "中性"]]) { const option = document.createElement("option"); option.value = value; option.textContent = label; option.selected = line.direction_mode === value; directionMode.append(option); }
     const directionText = fieldInput(line, "direction_text"); directionText.placeholder = "例如：压低声音，克制而悲伤";
     const directionCell = tableCell("逐句演绎", directionMode, directionText);
+    const resultCell = tableCell("状态 / 最新结果", lineResultView(line)); resultCell.classList.add("line-result-cell");
     const actions = tableCell("操作"); actions.classList.add("line-controls");
-    for (const [action, label] of [["up", "上移"], ["down", "下移"], ["single", "单句"], ["delete", "删除"]]) { const button = document.createElement("button"); button.type = "button"; button.className = action === "delete" ? "danger" : "secondary"; button.dataset.action = action; button.textContent = label; button.setAttribute("aria-label", `第 ${line.order} 句${label}`); actions.append(button); }
-    row.append(indexCell, roleCell, voiceCell, languageCell, startCell, endCell, textCell, directionCell, actions);
+    for (const [action, label] of [["up", "上移"], ["down", "下移"], ["single", "生成该句"], ["delete", "删除"]]) { const button = document.createElement("button"); button.type = "button"; button.className = action === "delete" ? "danger" : "secondary"; button.dataset.action = action; button.textContent = label; button.disabled = state.batching; button.setAttribute("aria-label", `第 ${line.order} 句${label}`); actions.append(button); }
+    row.append(indexCell, roleCell, voiceCell, languageCell, startCell, endCell, textCell, directionCell, resultCell, actions);
     tableFragment.append(row);
   }
   body.append(tableFragment);
@@ -1591,10 +1799,10 @@ function renderTimeline() {
   const trackFragment = document.createDocumentFragment();
   for (const line of visibleLines) {
     const lane = document.createElement("div"); lane.className = "timeline-lane"; lane.dataset.lineId = line.line_id;
-    const block = document.createElement("div"); block.className = `timeline-block${state.selectedLineId === line.line_id ? " selected" : ""}`; block.tabIndex = 0; block.dataset.lineId = line.line_id; block.setAttribute("aria-describedby", "timelineHelp");
-    const startHandle = document.createElement("button"); startHandle.type = "button"; startHandle.className = "timeline-handle start"; startHandle.dataset.resize = "start"; startHandle.setAttribute("aria-label", `调整第 ${line.order} 句开始时间`);
+    const block = document.createElement("div"); block.className = `timeline-block${state.selectedLineId === line.line_id ? " selected" : ""}`; block.tabIndex = state.batching ? -1 : 0; block.dataset.lineId = line.line_id; block.dataset.status = line.status || "pending"; block.setAttribute("aria-describedby", "timelineHelp");
+    const startHandle = document.createElement("button"); startHandle.type = "button"; startHandle.disabled = state.batching; startHandle.className = "timeline-handle start"; startHandle.dataset.resize = "start"; startHandle.setAttribute("aria-label", `调整第 ${line.order} 句开始时间`);
     const label = document.createElement("span"); label.className = "timeline-block-label";
-    const endHandle = document.createElement("button"); endHandle.type = "button"; endHandle.className = "timeline-handle end"; endHandle.dataset.resize = "end"; endHandle.setAttribute("aria-label", `调整第 ${line.order} 句结束时间`);
+    const endHandle = document.createElement("button"); endHandle.type = "button"; endHandle.disabled = state.batching; endHandle.className = "timeline-handle end"; endHandle.dataset.resize = "end"; endHandle.setAttribute("aria-label", `调整第 ${line.order} 句结束时间`);
     block.append(startHandle, label, endHandle);
     updateTimelineBlock(block, line, scaleMs);
     lane.append(block); trackFragment.append(lane);
@@ -1614,6 +1822,7 @@ function markLineChanged(line, field) {
 }
 
 async function parseDialogueEditor() {
+  if (state.batching) throw new Error("当前生成期间已锁定时间轴；请等待完成或先停止任务。");
   const text = $("batchInput").value.trim();
   if (!text) throw new Error("请先粘贴脚本、SRT、TXT 或 JSON。");
   if (!confirmReplaceDirtyProject("重新解析")) return;
@@ -1654,6 +1863,10 @@ async function parseDialogueEditor() {
 }
 
 function addDialogueLine() {
+  if (state.batching) {
+    setActionMessage("batchStatus", "当前生成期间已锁定时间轴；请等待完成或先停止任务。", "error");
+    return;
+  }
   if (!state.dialogueProject) state.dialogueProject = { schema_version: 2, project_id: crypto.randomUUID().replaceAll("-", ""), revision: 0, name: "未命名对白工程", timing: { policy: "preserve", gap_ms: 200, snap_ms: 50 }, lines: [] };
   const last = state.dialogueProject.lines.at(-1);
   const start = last ? last.end_ms + 200 : 0;
@@ -1666,6 +1879,7 @@ function addDialogueLine() {
 }
 
 async function saveDialogueProject() {
+  if (state.batching) throw new Error("当前生成期间不能再次保存工程；完成后会自动同步最新 revision。");
   if (!state.dialogueProject) throw new Error("当前没有可保存的工程。");
   const expected = state.projectBaseRevision;
   state.dialogueProject = await api(`/api/projects/${encodeURIComponent(state.dialogueProject.project_id)}`, { method: "PUT", body: JSON.stringify({ project: state.dialogueProject, expected_revision: expected }) });
@@ -1676,6 +1890,7 @@ async function saveDialogueProject() {
 }
 
 async function exportDialogueProject() {
+  if (state.batching) throw new Error("当前生成期间不能导出工程；请等待结果同步完成。");
   if (!state.dialogueProject) throw new Error("当前没有可导出的工程。");
   const result = await api("/api/projects/export", { method: "POST", body: JSON.stringify({ project: state.dialogueProject }) });
   await window.t8Desktop?.openPath(result.path);
@@ -1683,6 +1898,7 @@ async function exportDialogueProject() {
 }
 
 async function importDialogueProject() {
+  if (state.batching) throw new Error("当前生成期间不能替换工程；请等待完成或先停止任务。");
   if (!confirmReplaceDirtyProject("导入工程包")) return;
   const path = await window.t8Desktop?.chooseBundleFile("project");
   if (!path) return;
@@ -1697,6 +1913,7 @@ async function importDialogueProject() {
 }
 
 async function exportDialogueSrt() {
+  if (state.batching) throw new Error("当前生成期间不能回写 SRT；请等待结果同步完成。");
   if (!state.dialogueProject) throw new Error("当前没有可回写的时间轴。");
   const result = await api("/api/dialogue/srt", { method: "POST", body: JSON.stringify({ project: state.dialogueProject }) });
   $("batchKind").value = "srt";
@@ -1720,6 +1937,7 @@ function applyTimelineDelta(line, originStart, originEnd, mode, delta) {
 }
 
 function startTimelineDrag(event) {
+  if (state.batching) return;
   if (event.button !== 0) return;
   const block = event.target.closest(".timeline-block");
   if (!block || !state.dialogueProject) return;
@@ -1764,6 +1982,7 @@ function startTimelineDrag(event) {
 }
 
 function timelineKey(event) {
+  if (state.batching) return;
   const block = event.target.closest(".timeline-block");
   if (!block || !["ArrowLeft", "ArrowRight"].includes(event.key)) return;
   const line = state.dialogueProject?.lines.find((item) => item.line_id === block.dataset.lineId);
@@ -2029,6 +2248,7 @@ $("installWhisperButton").addEventListener("click", () => installWhisperComponen
 $("batchKind").addEventListener("change", updateBatchKind);
 $("batchInput").addEventListener("input", updateDetectedRoles);
 $("roleMappingPanel").addEventListener("change", (event) => {
+  if (state.batching) return;
   const role = event.target.dataset.role;
   if (!role || !state.dialogueProject) return;
   let changed = false;
@@ -2065,7 +2285,7 @@ $("scriptFileInput").addEventListener("change", async (event) => {
     event.target.value = "";
   }
 });
-$('timingPolicy').addEventListener('change', () => { if (state.dialogueProject) { state.dialogueProject.timing.policy = $("timingPolicy").value; state.dialogueProject.revision += 1; markProjectDirty(); renderTimeline(); } });
+$('timingPolicy').addEventListener('change', () => { if (state.batching) return; if (state.dialogueProject) { state.dialogueProject.timing.policy = $("timingPolicy").value; state.dialogueProject.revision += 1; markProjectDirty(); renderTimeline(); } });
 $("analyzeRolesButton").addEventListener("click", () => analyzeBatchRoles().catch((error) => { setActionMessage("batchStatus", actionableError(error, "检查角色行是否使用“角色：台词”或“[角色] 台词”格式"), "error"); }));
 $("batchStartButton").addEventListener("click", () => startBatch().catch((error) => { setActionMessage("batchStatus", actionableError(error, "检查模型、音色映射和台词内容后重试"), "error"); }));
 $("batchCancelButton").addEventListener("click", cancelBatch);
@@ -2080,6 +2300,7 @@ $('refreshQueueButton').addEventListener('click', () => refreshQueue().catch((er
 $('timelineTrack').addEventListener('pointerdown', startTimelineDrag);
 $('timelineTrack').addEventListener('keydown', timelineKey);
 $('timelineBody').addEventListener('input', (event) => {
+  if (state.batching) return;
   const field = event.target.dataset.field;
   const row = event.target.closest('tr');
   const line = state.dialogueProject?.lines.find((item) => item.line_id === row?.dataset.lineId);
@@ -2097,6 +2318,7 @@ $('timelineBody').addEventListener('input', (event) => {
   }
 });
 $('timelineBody').addEventListener('change', (event) => {
+  if (state.batching) return;
   const field = event.target.dataset.field;
   const row = event.target.closest('tr');
   const line = state.dialogueProject?.lines.find((item) => item.line_id === row?.dataset.lineId);
@@ -2112,6 +2334,10 @@ $('timelineBody').addEventListener('change', (event) => {
 $('timelineBody').addEventListener('click', async (event) => {
   const button = event.target.closest('button[data-action]');
   if (!button || !state.dialogueProject) return;
+  if (state.batching) {
+    setActionMessage("batchStatus", "已有任务正在运行；时间轴已锁定，请等待完成或先停止当前任务。", "error");
+    return;
+  }
   const row = button.closest('tr');
   const index = state.dialogueProject.lines.findIndex((item) => item.line_id === row.dataset.lineId);
   if (index < 0) return;
@@ -2122,9 +2348,17 @@ $('timelineBody').addEventListener('click', async (event) => {
   if (action === 'down' && index < state.dialogueProject.lines.length - 1) { [state.dialogueProject.lines[index + 1], state.dialogueProject.lines[index]] = [state.dialogueProject.lines[index], state.dialogueProject.lines[index + 1]]; changed = true; }
   if (action === 'single') {
     try {
-      const line = state.dialogueProject.lines[index];
+      const requestedLineId = state.dialogueProject.lines[index].line_id;
+      state.selectedLineId = requestedLineId;
+      renderTimeline();
+      await ensureDialogueProjectSaved();
+      const line = state.dialogueProject.lines.find((item) => item.line_id === requestedLineId);
+      if (!line) throw new Error("保存工程后找不到当前句，请重新选择后重试。");
+      line.status = "pending";
+      line.error = "";
+      refreshTimelineLineState(requestedLineId);
       const defaults = await currentBatchDefaults();
-      await runBatchPayload({ defaults, items: [{ ...line, subtitle: { index: line.order, start_ms: line.start_ms, end_ms: line.end_ms, text: line.text } }], timeline: true, project_id: state.dialogueProject.project_id });
+      await runBatchPayload({ defaults, items: [{ ...line, subtitle: { index: line.order, start_ms: line.start_ms, end_ms: line.end_ms, text: line.text } }], timeline: true, timing_policy: state.dialogueProject.timing?.policy || "preserve", project_id: state.dialogueProject.project_id, project_revision: state.projectBaseRevision }, { singleLineId: requestedLineId });
     } catch (error) {
       setActionMessage("batchStatus", actionableError(error, "检查该句音色、演绎指令和模型状态后重试"), "error");
     }

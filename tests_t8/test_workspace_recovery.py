@@ -170,6 +170,8 @@ def test_line_regeneration_updates_checkpoint_and_full_project_remix(
     failed_line = next(line for line in failed["lines"] if line["line_id"] == first_id)
     assert failed_line["audio_file"] == "line-a.wav"
     assert failed_line["status"] == "failed"
+    assert failed_line["error"] == "CUDA allocation failed"
+    assert failed_line["error_type"] == "OutOfMemoryError"
     assert failed["checkpoint"]["last_error"] == {
         "line_id": first_id,
         "message": "CUDA allocation failed",

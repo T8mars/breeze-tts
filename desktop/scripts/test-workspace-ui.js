@@ -141,3 +141,59 @@ test("timeline controls have per-line accessible names and touch-sized handles",
   assert.match(renderer, /第 \$\{line\.order\} 句\$\{label\}/);
   assert.match(css, /\.timeline-handle\s*\{[^}]*width:\s*24px/);
 });
+
+test("single-line rerun saves first, synchronizes revisions and exposes honest line results", () => {
+  const saveGuard = sourceBetween(renderer, "async function ensureDialogueProjectSaved", "function renderTimeline");
+  assert.match(saveGuard, /state\.projectBaseRevision === null \|\| state\.projectDirty/);
+  assert.match(saveGuard, /await saveDialogueProject\(\)/);
+
+  const batchSource = sourceBetween(renderer, "async function runBatchPayload", "async function resumeBatchJob");
+  const syncSource = sourceBetween(renderer, "async function syncDialogueProjectFromBatch", "async function ensureDialogueProjectSaved");
+  assert.match(batchSource, /singleLineId/);
+  assert.match(batchSource, /syncDialogueProjectFromBatch\(message\.project/);
+  assert.match(syncSource, /state\.projectBaseRevision = project\.revision/);
+  assert.match(batchSource, /message\.full_project_mix === true && message\.remix\?\.status === "completed"/);
+  assert.match(batchSource, /message\.remix\?\.reason/);
+  assert.match(batchSource, /整条时间轴（已自动重混）/);
+  assert.match(batchSource, /仅得到当前句结果/);
+
+  const clickSource = sourceBetween(renderer, "$('timelineBody').addEventListener('click'", '$("referenceAudio").addEventListener');
+  assert.ok(clickSource.indexOf("await ensureDialogueProjectSaved()") < clickSource.indexOf("runBatchPayload({ defaults"));
+  assert.match(clickSource, /\{ singleLineId: requestedLineId \}/);
+  assert.match(clickSource, /project_revision: state\.projectBaseRevision/);
+  assert.match(renderer, /document\.querySelectorAll\('#timelineBody input, #timelineBody select, #timelineBody textarea, #timelineBody button'\)/);
+  assert.match(renderer, /function startTimelineDrag\(event\) \{\s*if \(state\.batching\) return/);
+  assert.match(renderer, /function timelineKey\(event\) \{\s*if \(state\.batching\) return/);
+
+  assert.match(html, />状态 \/ 最新结果<\/th>/);
+  assert.match(renderer, /function lineResultView/);
+  assert.match(renderer, /line\.status = "running"/);
+  assert.match(renderer, /line\.status = "completed"/);
+  assert.match(renderer, /line\.status = "failed"/);
+  assert.match(renderer, /audio\.src = `\/api\/outputs\/\$\{encodeURIComponent\(line\.audio_file\)\}`/);
+  assert.match(renderer, /上次成功音频（本次失败）/);
+  assert.match(css, /\.line-result-state\.running/);
+  assert.match(css, /\.line-result-state\.completed/);
+  assert.match(css, /\.line-result-state\.failed/);
+});
+
+test("full-project generation saves first, uses CAS and skips clean completed lines", () => {
+  const generationFilter = sourceBetween(renderer, "function lineNeedsGeneration", "async function remixCompletedDialogueProject");
+  const context = { LINE_GENERATION_DIRTY_FIELDS: new Set(["text", "role", "voice_id", "language", "direction_mode", "direction_text", "cfg_scale", "seed", "instruction", "reference"]) };
+  vm.runInNewContext(`${generationFilter}; this.needs = lineNeedsGeneration;`, context);
+  assert.equal(context.needs({ status: "completed", audio_file: "line.wav", dirty_fields: ["timing"] }), false);
+  assert.equal(context.needs({ status: "completed", audio_file: "line.wav", dirty_fields: ["text"] }), true);
+  assert.equal(context.needs({ status: "failed", audio_file: "old.wav", dirty_fields: [] }), true);
+  assert.equal(context.needs({ status: "completed", audio_file: "", dirty_fields: [] }), true);
+
+  const startSource = sourceBetween(renderer, "async function startBatch", "function cancelBatch");
+  assert.ok(startSource.indexOf("await ensureDialogueProjectSaved()") < startSource.indexOf("const project = state.dialogueProject"));
+  assert.ok(startSource.indexOf("const project = state.dialogueProject") < startSource.indexOf("const items = linesToGenerate.map"));
+  assert.match(startSource, /project_revision: state\.projectBaseRevision/);
+  assert.match(startSource, /if \(!linesToGenerate\.length\) return remixCompletedDialogueProject\(project\)/);
+
+  const remixSource = sourceBetween(renderer, "async function remixCompletedDialogueProject", "async function startBatch");
+  assert.match(remixSource, /\/api\/projects\/\$\{encodeURIComponent\(project\.project_id\)\}\/remix/);
+  assert.match(remixSource, /expected_revision: state\.projectBaseRevision/);
+  assert.match(remixSource, /无需重生成/);
+});
