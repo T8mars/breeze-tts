@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.1 — 2026-09-04
+
+- Synchronize the node-package release version with the Voice Studio 0.3.1 distribution.
+- Keep the existing eight-node API and workflow behavior unchanged; this is a compatibility/version-contract release for the shared bundle.
+
+## 0.3.0 — 2026-09-04
+
+- Keep the desktop and ComfyUI distribution version contract aligned for the long-form voice-lock, Whisper Large-v3, pronunciation, and spatial-effects desktop release.
+
 ## 0.2.9 — 2026-09-03
 
 - Adds the T8star-Aix GitHub, Hugging Face, Bilibili, and YouTube links to the package documentation.

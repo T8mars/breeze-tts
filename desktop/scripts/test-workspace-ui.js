@@ -130,6 +130,24 @@ test("inline vocal events are visible in both Chinese and English", () => {
   }
 });
 
+test("normal generation is the default and streaming playback is opt-in", () => {
+  assert.match(html, /id="streamAudio" type="checkbox"/);
+  assert.doesNotMatch(html, /id="streamAudio"[^>]*\schecked(?:\s|>)/);
+  assert.match(html, /默认关闭：生成完整 WAV 后再提供试听与下载/);
+  assert.match(renderer, /stream_audio:\s*streamAudio/);
+  assert.match(renderer, /message\.stream_audio === true/);
+  assert.match(renderer, /正在生成完整音频/);
+  assert.match(fs.readFileSync(path.resolve(root, "..", "t8_runtime", "server.py"), "utf8"), /stream_audio = payload\.get\("stream_audio"\) is True/);
+});
+
+test("Fast All reports Triton readiness and safely falls back to Eager", () => {
+  assert.match(html, /id="runtimeCompatibilityHint"/);
+  assert.match(renderer, /packages\["triton-windows"\]/);
+  assert.match(renderer, /Fast All \/ Triton/);
+  assert.match(renderer, /fastOption\.disabled = !fastAllReady/);
+  assert.match(renderer, /runtime\.fast_all_fallback_reason/);
+});
+
 test("global task feedback and keyboard tabs remain available across pages", () => {
   assert.match(html, /id="globalTaskBar"[^>]+aria-live="polite"[^>]+hidden/);
   assert.match(renderer, /function setGlobalTask/);
@@ -215,11 +233,58 @@ test("batch default role can be selected from the saved voice library", () => {
   assert.match(renderer, /defaultRolePreset"\)\.addEventListener\("change"/);
 });
 
-test("Whisper small is a bundled default and repair handles the managed runtime", () => {
-  assert.match(html, /Whisper small（整合包内置）/);
-  assert.match(renderer, /whisper_small_bundled/);
-  assert.match(renderer, /整合包内置 Whisper small/);
+test("Whisper Large-v3 is bundled and its draft cannot silently replace the transcript", () => {
+  assert.match(html, /Whisper Large-v3（整合包内置）/);
+  assert.match(html, /不会自动覆盖准确逐字稿/);
+  assert.match(renderer, /whisper_large_bundled/);
+  assert.match(renderer, /result\.audio_quality/);
+  assert.match(renderer, /确认没有音乐、混响或回声/);
+  assert.doesNotMatch(renderer, /referenceText"\)\.value = \(result\.segments/);
   assert.match(main, /"--break-system-packages"/);
+});
+
+test("reference transcripts show a prominent warning and are enforced end to end", () => {
+  assert.ok((html.match(/class="critical-transcript-warning" role="alert"/g) || []).length >= 2);
+  assert.match(html, /必须边听边逐字核对并修改正确，否则不要生成/);
+  assert.match(html, /重复、拖音、回声样伪影和异常音色/);
+  assert.match(html, /我已播放参考音频并逐字核对/);
+  assert.match(css, /\.critical-transcript-warning\s*\{[^}]*border:\s*2px solid/);
+  assert.match(renderer, /reference_transcript_verified:\s*usesSavedVoice \|\|/);
+  assert.match(renderer, /reference_transcript_verified:\s*\$\("voiceTranscriptVerified"\)\.checked/);
+  const server = fs.readFileSync(path.resolve(root, "..", "t8_runtime", "server.py"), "utf8");
+  assert.match(server, /def _require_verified_reference_transcript/);
+  assert.match(server, /回声样伪影和异常音色/);
+});
+
+test("creative presets are categorized and perform explicit one-click actions", () => {
+  assert.match(html, /id="creativePresetPanel"/);
+  for (const category of ["声音事件 · Breeze 原生", "角色声线 · 一键填写", "内容场景 · 一键填写", "后期音效 · T8 处理"]) {
+    assert.ok(html.includes(category), `missing creative preset category: ${category}`);
+  }
+  for (const kind of ["event", "voice", "scene", "effect"]) {
+    assert.match(html, new RegExp(`data-preset-kind="${kind}"`));
+  }
+  for (const effect of ["telephone", "walkie_talkie", "radio", "megaphone", "muffled", "dream", "robot"]) {
+    assert.ok(html.includes(`value="${effect}"`) || html.includes(`data-preset-value="${effect}"`), `missing effect preset: ${effect}`);
+  }
+  assert.match(renderer, /const VOICE_PRESETS =/);
+  assert.match(renderer, /const SCENE_PRESETS =/);
+  assert.match(renderer, /const AUDIO_EFFECT_GROUPS =/);
+  assert.match(renderer, /function insertAtCursor/);
+  assert.match(renderer, /function applyCreativePreset/);
+  assert.match(renderer, /data-preset-kind="effect"/);
+  assert.match(css, /\.preset-groups\s*\{[^}]*grid-template-columns/);
+});
+
+test("long-form creation exposes voice lock, separate spoken text and spatial effects", () => {
+  assert.match(html, /id="longFormVoiceLock"[^>]*checked/);
+  assert.match(html, /id="pronunciationAliases"/);
+  assert.match(html, /不修改原文、字幕或工程显示/);
+  assert.match(html, /id="audioEffect"/);
+  assert.match(html, /山间回音/);
+  assert.match(renderer, /long_form_voice_lock/);
+  assert.match(renderer, /spoken_text/);
+  assert.match(renderer, /audio_effect/);
 });
 
 test("timeline controls have per-line accessible names and touch-sized handles", () => {

@@ -29,7 +29,7 @@ _QUEUE_RESERVED = {
     "request", "recoverable", "results", "recovery",
 }
 _GENERATION_DIRTY_FIELDS = {
-    "text", "role", "voice_id", "language", "direction_mode", "direction_text",
+    "text", "spoken_text", "role", "voice_id", "language", "direction_mode", "direction_text",
     "cfg_scale", "seed", "instruction", "reference",
 }
 
@@ -251,7 +251,8 @@ def _project_resume_payload(project: dict[str, Any]) -> dict[str, Any]:
                     key: deepcopy(line.get(key))
                     for key in (
                         "line_id", "order", "role", "voice_id", "language", "text",
-                        "direction_mode", "direction_text", "cfg_scale", "seed",
+                        "spoken_text", "direction_mode", "direction_text", "cfg_scale", "seed",
+                        "audio_effect",
                     )
                 },
                 "subtitle": {
@@ -606,16 +607,28 @@ def project_mix_results(project_id: str) -> tuple[dict[str, Any], list[dict[str,
         if not safe_audio or target is None or not target.is_file():
             missing.append(f"{line['order']}:{line['line_id']}")
             continue
+        metadata = deepcopy(line.get("generation_metadata") or {})
+        dry_name = Path(str(metadata.get("dry_output") or "")).name
+        dry_target = (root / dry_name).resolve() if dry_name else None
+        # Imported project JSON is untrusted.  Never let a stored absolute
+        # dry_output path escape the managed output directory.
+        if dry_target is not None and dry_target.is_file():
+            metadata["dry_output"] = str(dry_target)
+        else:
+            metadata.pop("dry_output", None)
         results.append({
             "index": line["order"] - 1,
             "output": safe_audio,
-            "metadata": {**deepcopy(line.get("generation_metadata") or {}), "output": str(target)},
+            "metadata": {**metadata, "output": str(target)},
             "role": line.get("role"),
             "line_id": line["line_id"],
             "subtitle": {
                 "index": line["order"], "start_ms": line["start_ms"],
                 "end_ms": line["end_ms"], "text": line["text"],
             },
+            "audio_effect": deepcopy(
+                line.get("audio_effect") or {"preset": "none", "mix": 0.35}
+            ),
         })
     if missing:
         raise ValueError("以下台词尚无可重混音频：" + "、".join(missing))

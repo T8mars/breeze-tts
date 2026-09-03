@@ -14,7 +14,7 @@ $sourcePath = if ($SourcePythonRoot) {
     $null
 }
 $lockPath = Join-Path $projectRoot 'requirements-desktop.lock.txt'
-$whisperModelRoot = Join-Path $projectRoot '.runtime\whisper-models\faster-whisper-small'
+$whisperModelRoot = Join-Path $projectRoot '.runtime\whisper-models\faster-whisper-large-v3'
 
 if (-not (Test-Path -LiteralPath (Join-Path $runtimePath 'python.exe'))) {
     if (-not $sourcePath -or -not (Test-Path -LiteralPath (Join-Path $sourcePath 'python.exe'))) {
@@ -52,7 +52,7 @@ if (-not $SkipInstall) {
 if ($LASTEXITCODE -ne 0) { throw 'Runtime verification failed.' }
 
 & $python (Join-Path $PSScriptRoot 'download_whisper_model.py') --output-dir $whisperModelRoot
-if ($LASTEXITCODE -ne 0) { throw 'Bundled Whisper Small model download failed.' }
+if ($LASTEXITCODE -ne 0) { throw 'Bundled Whisper Large-v3 model download failed.' }
 
 $freeze = & $python -m pip freeze --all | ForEach-Object {
     if ($_ -match '^pip @ ') { 'pip==26.1.2' }
@@ -61,5 +61,5 @@ $freeze = & $python -m pip freeze --all | ForEach-Object {
 }
 [System.IO.File]::WriteAllLines($lockPath, $freeze, [System.Text.UTF8Encoding]::new($false))
 Write-Host "Portable runtime ready: $runtimePath"
-Write-Host "Bundled Whisper Small ready: $whisperModelRoot"
+Write-Host "Bundled Whisper Large-v3 ready: $whisperModelRoot"
 Write-Host "Resolved lock written: $lockPath"

@@ -10,6 +10,7 @@
   "critical_packages": {
     "torch": "2.9.1+cu128",
     "torchaudio": "2.9.1+cu128",
+    "triton-windows": "3.5.1.post24",
     "transformers": "4.57.3",
     "qwen-tts": "0.1.1",
     "numpy": "2.2.6",
@@ -22,10 +23,18 @@
     "av": "17.1.0"
   },
   "resolved_lock": "requirements-desktop.lock.txt",
-  "resolved_lock_sha256": "9ec2e8e97912b05758bf0fedf7297b4699c0d465fb393a0932383a29728de802",
-  "runtime_size_bytes": 5547371762,
+  "bundled_models": {
+    "whisper": {
+      "repository": "Systran/faster-whisper-large-v3",
+      "revision": "edaa852ec7e145841d8ffdb056a99866b5f0a478",
+      "path": "models/faster-whisper-large-v3"
+    }
+  },
+  "resolved_lock_sha256": "a021cebfe23b26ecfc70b19bcda899ce508207d1cad5ef897f9c5dc73fd84248",
+  "runtime_size_bytes": 5676553019,
   "verification": [
     "packaging/verify_runtime.py",
+    "packaging/verify_triton.py --kernel",
     "python -m pip check"
   ]
 }

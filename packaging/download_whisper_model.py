@@ -6,15 +6,16 @@ from pathlib import Path
 from huggingface_hub import snapshot_download
 
 
-REPOSITORY = "Systran/faster-whisper-small"
-REVISION = "536b0662742c02347bc0e980a01041f333bce120"
+REPOSITORY = "Systran/faster-whisper-large-v3"
+REVISION = "edaa852ec7e145841d8ffdb056a99866b5f0a478"
 REQUIRED_FILES = (
     ".gitattributes",
     "README.md",
     "config.json",
     "model.bin",
+    "preprocessor_config.json",
     "tokenizer.json",
-    "vocabulary.txt",
+    "vocabulary.json",
 )
 
 

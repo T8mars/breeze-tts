@@ -21,6 +21,7 @@ class StubRuntime:
         self.model_dir = model_dir
         self.output_root = output_root
         self.calls: list[str] = []
+        self.requests: list[object] = []
         self.block_on_text: set[str] = set()
         self.fail_on_text: set[str] = set()
         self.generate_hook: Callable[[str], None] | None = None
@@ -36,6 +37,7 @@ class StubRuntime:
         on_chunk=None,
     ) -> tuple[Path, dict[str, object]]:
         self.calls.append(request.text)
+        self.requests.append(request)
         if self.generate_hook is not None:
             hook, self.generate_hook = self.generate_hook, None
             hook(request.text)
@@ -168,6 +170,21 @@ def test_batch_websocket_generates_first_item_without_model(monkeypatch, tmp_pat
     assert completed["job"]["status"] == "completed"
     assert runtime.calls == ["第一句"]
     assert merged_indexes == [[0]]
+
+
+def test_batch_voice_design_locks_following_lines_to_first_role_anchor(monkeypatch, tmp_path: Path) -> None:
+    app, runtime, _merged_indexes = _batch_app(monkeypatch, tmp_path)
+
+    with TestClient(app, base_url="http://127.0.0.1") as client:
+        completed = _run_batch(client, _payload("第一句", "第二句"))[-1]
+
+    assert completed["type"] == "batch_complete"
+    assert runtime.requests[0].mode == "design"
+    assert runtime.requests[0].ref_audio_path is None
+    assert runtime.requests[1].mode == "direction"
+    assert runtime.requests[1].ref_audio_path == tmp_path / "outputs" / "line-1.wav"
+    assert runtime.requests[1].ref_text == "第一句"
+    assert completed["results"][1]["metadata"]["long_form_voice_lock"]["anchored"] is True
 
 
 def test_batch_websocket_cancel_pauses_and_resume_merges_checkpointed_items(

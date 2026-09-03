@@ -18,6 +18,7 @@ from t8_runtime.workspace_store import (
     import_project,
     list_history,
     load_project,
+    project_mix_results,
     queue_put,
     queue_snapshot,
     queue_update,
@@ -90,6 +91,38 @@ def test_clone_override_routes_to_native_direction() -> None:
     )
     assert request["mode"] == "direction"
     assert request["instruction"] == "低声悲伤"
+
+
+def test_project_keeps_display_text_spoken_text_and_per_line_effect_separate() -> None:
+    line = normalize_project({"lines": [{
+        "text": "甄宓说：你来吗？（山间回音）",
+        "spoken_text": "真伏说：你来吗？",
+        "audio_effect": {"preset": "mountain_echo", "mix": 0.45},
+    }]})["lines"][0]
+    request = effective_generation(line, {"mode": "design"}, {"instruction": "自然"})
+    assert request["text"] == line["text"]
+    assert request["spoken_text"] == "真伏说：你来吗？"
+    assert request["audio_effect"] == {"preset": "mountain_echo", "mix": 0.45, "label": "山间回音"}
+
+
+def test_project_remix_does_not_trust_external_dry_output_path(isolated_data: Path, monkeypatch) -> None:
+    output = isolated_data / "output"
+    output.mkdir()
+    monkeypatch.setenv("T8_BREEZE_OUTPUT_DIR", str(output))
+    sf_path = output / "line.wav"
+    sf_path.write_bytes(b"managed")
+    project = normalize_project({"lines": [{
+        "text": "安全路径",
+        "status": "completed",
+        "audio_file": sf_path.name,
+        "generation_metadata": {"dry_output": "C:/Windows/System32/config/SAM"},
+    }]})
+    saved = save_project(project)
+
+    _project, results = project_mix_results(saved["project_id"])
+
+    assert "dry_output" not in results[0]["metadata"]
+    assert Path(results[0]["metadata"]["output"]) == sf_path.resolve()
 
 
 def test_project_store_revision_bundle_and_tamper_rejection(isolated_data: Path) -> None:

@@ -14,9 +14,11 @@
 > [!NOTE]
 > This workspace also contains the unofficial **T8star-Aix Voice Studio** Windows portable integration and the user-requested `comfyui-breeze-tts-T8` node package. See [`T8_DISTRIBUTION.md`](T8_DISTRIBUTION.md) and [`roadmap.md`](roadmap.md). These additions are not affiliated with or endorsed by BreezeBlue.
 
-### T8star-Aix Voice Studio 0.2.9
+### T8star-Aix Voice Studio 0.3.1
 
-The Windows integration uses an IndexTTS 2.5-inspired light launcher and functional workbench. Version 0.2.9 adds separate, allowlisted GitHub, Hugging Face, Bilibili, and YouTube creator links to the desktop launcher and distribution documentation. It retains the bundled `faster-whisper` runtime and pinned Whisper Small checkpoint for offline default transcription, runnable batch examples, the complete reference-audio Voice Library 2.1, inline vocal events, and revision-safe editable timelines with per-line rerun and automatic full-timeline remix.
+The Windows integration uses an IndexTTS 2.5-inspired light launcher and functional workbench. Version 0.3.1 pins and bundles Whisper Large-v3 for editable transcription drafts, displays an explicit high-visibility warning, and rejects unverified raw reference transcripts in both the UI and local backend. It locks long-form Voice Design to a stable first-segment voice anchor, separates subtitle text from rare-character spoken replacements, and provides one-click creative presets grouped into native vocal events, voice characters, production scenes, emotion/delivery, spatial environments, communication devices, and creative tone effects. The timeline retains per-line effects, per-line rerun, and automatic full-timeline remix.
+
+Whisper never cleans or changes the reference waveform. Its text is only a draft: play the reference audio and correct every word before confirming it. A wrong or incomplete transcript paired with the reference can lead to repetitions, dragged syllables, echo-like artifacts, or an unstable cloned voice.
 
 ### T8star-Aix 社媒与资源
 

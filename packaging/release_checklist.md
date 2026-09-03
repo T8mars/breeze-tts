@@ -3,7 +3,7 @@
 - [x] `roadmap.md` scope and version are current.
 - [x] Official source revision and model revision are pinned.
 - [x] Model manifest passes full size and SHA-256 verification.
-- [x] Model files are not embedded in the public portable zip.
+- [x] Licensed Breeze TTS 2 checkpoint weights are not embedded in the public portable zip; the pinned Whisper Large-v3 transcription model is bundled for offline draft transcription.
 - [x] License acceptance is required before model download or use.
 - [x] Portable CPython imports all locked dependencies and `pip check` passes.
 - [x] Desktop starts on loopback only; CSP, navigation, and IPC allowlists remain enabled.

@@ -11,6 +11,7 @@ import threading
 import uuid
 import zipfile
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -32,6 +33,7 @@ from .config import (
     user_data_dir,
 )
 from .batch_audio import merge_batch_outputs
+from .audio_effects import extract_inline_audio_effect
 from .diagnostics import collect_diagnostics, write_redacted_report
 from .model_store import (
     DOWNLOAD_MANAGER,
@@ -40,10 +42,11 @@ from .model_store import (
     validate_model_dir,
 )
 from .runtime_manager import DEFAULT_INSTRUCTION, GenerationRequest, RuntimeManager
+from .pronunciation import apply_pronunciation_aliases
 from .dialogue import apply_timeline_edit, new_project, normalize_project, parse_dialogue, to_srt
 from .script_tools import parse_multi_role_script, parse_srt
 from .settings_store import load_settings, update_settings
-from .transcription import bundled_whisper_small_available, transcribe_audio, whisper_available
+from .transcription import bundled_whisper_large_available, transcribe_audio, whisper_available
 from .workspace_store import (
     ProjectRevisionConflict,
     QueueRevisionConflict,
@@ -150,6 +153,7 @@ class VoiceCreateRequest(BaseModel):
     mode: str = "design"
     instruction: str = DEFAULT_INSTRUCTION
     reference_text: str = ""
+    reference_transcript_verified: bool = False
     reference_filename: str = "reference.wav"
     reference_audio_base64: str = ""
     language: str = "auto"
@@ -164,6 +168,7 @@ class VoiceUpdateRequest(BaseModel):
     mode: str | None = None
     instruction: str | None = None
     reference_text: str | None = None
+    reference_transcript_verified: bool | None = None
     reference_filename: str = "reference.wav"
     reference_audio_base64: str = ""
     clear_reference: bool = False
@@ -177,7 +182,7 @@ class VoiceUpdateRequest(BaseModel):
 class TranscriptionRequest(BaseModel):
     reference_filename: str
     reference_audio_base64: str
-    model_size: str = "small"
+    model_size: str = "large-v3"
     language: str | None = None
 
 
@@ -305,15 +310,38 @@ def _apply_voice_profile(payload: dict[str, Any]) -> tuple[dict[str, Any], Path 
     return _apply_line_direction(merged, base_instruction=profile_instruction), reference
 
 
+def _require_verified_reference_transcript(payload: dict[str, Any]) -> None:
+    """Refuse raw Clone/Direction input until the user explicitly verifies its transcript."""
+    if str(payload.get("voice_id") or "").strip():
+        return
+    if str(payload.get("mode") or "design") not in {"clone", "direction"}:
+        return
+    if payload.get("reference_transcript_verified") is not True:
+        raise ValueError(
+            "参考逐字稿尚未核对：请播放参考音频，逐字修正 Whisper 草稿并勾选“完全一致”。"
+            "错字、漏字或内容不对应可能造成重复、拖音、回声样伪影和异常音色。"
+        )
+
+
 def _generation_request(payload: dict[str, Any], reference_path: Path | None) -> GenerationRequest:
     mode = str(payload.get("mode") or "design")
     default_cfg = 1.0 if mode == "clone" else 4.0
     cfg_scale = payload.get("cfg_scale")
     seed = payload.get("seed")
     max_new_tokens = payload.get("max_new_tokens")
+    original_text = str(payload.get("text") or "")
+    requested_spoken_text = str(payload.get("spoken_text") or "").strip() or original_text
+    requested_spoken_text, audio_effect = extract_inline_audio_effect(
+        requested_spoken_text, payload.get("audio_effect")
+    )
+    spoken_text, replacements = apply_pronunciation_aliases(
+        requested_spoken_text,
+        payload.get("pronunciation_aliases"),
+        language=str(payload.get("language") or "auto"),
+    )
     return GenerationRequest(
         mode=mode,
-        text=str(payload.get("text") or ""),
+        text=spoken_text,
         instruction=str(payload.get("instruction") or DEFAULT_INSTRUCTION),
         ref_audio_path=reference_path,
         ref_text=str(payload.get("reference_text") or "") or None,
@@ -321,6 +349,9 @@ def _generation_request(payload: dict[str, Any], reference_path: Path | None) ->
         seed=int(42 if seed in {None, ""} else seed),
         fast_all=bool(payload.get("fast_all", False)),
         max_new_tokens=int(1500 if max_new_tokens in {None, ""} else max_new_tokens),
+        original_text=original_text,
+        pronunciation_replacements=tuple(replacements),
+        audio_effect=audio_effect,
     )
 
 
@@ -541,8 +572,8 @@ def create_app(model_dir: Path | None = None) -> FastAPI:
             "voice_library": True,
             "srt": True,
             "whisper": whisper_available(),
-            "whisper_small_bundled": bundled_whisper_small_available(),
-            "fast_24gb": True,
+            "whisper_large_bundled": bundled_whisper_large_available(),
+            "fast_24gb": bool(runtime.status()["fast_all_available"]),
             "editable_timeline": True,
             "per_line_direction": True,
             "projects": True,
@@ -552,6 +583,9 @@ def create_app(model_dir: Path | None = None) -> FastAPI:
             "voice_bundle": True,
             "project_remix": True,
             "safe_voice_delete": True,
+            "long_form_voice_lock": True,
+            "pronunciation_aliases": True,
+            "spatial_effects": True,
         }
 
     @app.post("/api/dialogue/parse")
@@ -680,6 +714,7 @@ def create_app(model_dir: Path | None = None) -> FastAPI:
     def create_voice(request: VoiceCreateRequest) -> dict[str, Any]:
         reference_path: Path | None = None
         try:
+            _require_verified_reference_transcript(request.model_dump())
             if request.reference_audio_base64.strip():
                 reference_path = _decode_reference(request.model_dump())
             return save_voice(
@@ -704,10 +739,27 @@ def create_app(model_dir: Path | None = None) -> FastAPI:
     def edit_voice(voice_id: str, request: VoiceUpdateRequest) -> dict[str, Any]:
         reference_path: Path | None = None
         try:
+            current = get_voice(voice_id, include_private=True)
+            if current is None:
+                raise KeyError(voice_id)
+            request_values = request.model_dump(exclude_unset=True)
+            resulting_mode = str(request_values.get("mode") or current.get("mode") or "design")
+            touches_reference = any(
+                key in request_values
+                for key in ("mode", "reference_text", "reference_audio_base64", "clear_reference")
+            )
+            if (
+                resulting_mode in {"clone", "direction"}
+                and touches_reference
+                and request.reference_transcript_verified is not True
+            ):
+                raise ValueError(
+                    "保存克隆／导演音色前，必须播放参考音频并逐字核对参考稿。"
+                )
             if request.reference_audio_base64.strip():
                 reference_path = _decode_reference(request.model_dump())
-            values = request.model_dump(exclude_unset=True)
-            for key in ("reference_filename", "reference_audio_base64"):
+            values = request_values
+            for key in ("reference_filename", "reference_audio_base64", "reference_transcript_verified"):
                 values.pop(key, None)
             values["reference_source"] = reference_path
             return update_voice(voice_id, **values)
@@ -767,8 +819,8 @@ def create_app(model_dir: Path | None = None) -> FastAPI:
 
     @app.post("/api/tools/transcribe")
     def transcribe(request: TranscriptionRequest) -> dict[str, Any]:
-        if request.model_size not in {"tiny", "base", "small", "medium", "large-v3"}:
-            raise HTTPException(status_code=400, detail="不支持的 Whisper 模型规格。")
+        if request.model_size != "large-v3":
+            raise HTTPException(status_code=400, detail="此版本固定使用整合包内置 Whisper Large-v3。")
         reference_path: Path | None = None
         try:
             reference_path = _decode_reference(request.model_dump(), max_seconds=600.0)
@@ -819,6 +871,7 @@ def create_app(model_dir: Path | None = None) -> FastAPI:
         receiver: asyncio.Task | None = None
         try:
             payload = json.loads(await websocket.receive_text())
+            _require_verified_reference_transcript(payload)
             payload, profile_reference = _apply_voice_profile(payload)
             if profile_reference is not None:
                 reference_path = profile_reference
@@ -827,10 +880,13 @@ def create_app(model_dir: Path | None = None) -> FastAPI:
                 reference_path = temporary_reference_path
             request = _generation_request(payload, reference_path)
             request.validate()
+            stream_audio = payload.get("stream_audio") is True
             model_report = validate_model_dir(runtime.model_dir, verify_hashes=False)
             if not model_report["valid"] or not model_report["license_accepted"]:
                 raise PermissionError("模型不完整，或尚未接受 BreezeBlue 模型许可证。")
-            await websocket.send_json({"type": "start", "sample_rate": 24_000})
+            await websocket.send_json(
+                {"type": "start", "sample_rate": 24_000, "stream_audio": stream_audio}
+            )
             loop = asyncio.get_running_loop()
             chunk_queue: asyncio.Queue[bytes] = asyncio.Queue()
 
@@ -854,16 +910,18 @@ def create_app(model_dir: Path | None = None) -> FastAPI:
                     runtime.generate,
                     request,
                     cancel_event=cancel_event,
-                    on_chunk=on_chunk,
+                    on_chunk=on_chunk if stream_audio else None,
                 )
             )
-            while not generation.done() or not chunk_queue.empty():
-                try:
-                    chunk = await asyncio.wait_for(chunk_queue.get(), timeout=0.1)
-                    await websocket.send_bytes(chunk)
-                except asyncio.TimeoutError:
-                    continue
+            if stream_audio:
+                while not generation.done() or not chunk_queue.empty():
+                    try:
+                        chunk = await asyncio.wait_for(chunk_queue.get(), timeout=0.1)
+                        await websocket.send_bytes(chunk)
+                    except asyncio.TimeoutError:
+                        continue
             output_path, metadata = await generation
+            metadata["stream_audio"] = stream_audio
             history_item = append_history({
                 "kind": "single",
                 "mode": request.mode,
@@ -963,6 +1021,22 @@ def create_app(model_dir: Path | None = None) -> FastAPI:
                         remix_reason = ""
             queue_job = queue_claim(payload, job_id=resume_job_id or None)
             all_items = _expand_batch(payload)
+            long_form_voice_lock = payload.get("long_form_voice_lock") is not False
+            voice_anchors: dict[str, tuple[Path, str]] = {}
+
+            def voice_lock_key(item: dict[str, Any]) -> str:
+                voice_id = str(item.get("voice_id") or "").strip()
+                role = str(item.get("role") or "").strip().casefold()
+                return f"voice:{voice_id}" if voice_id else f"role:{role or 'default'}"
+
+            if long_form_voice_lock and latest_project is not None:
+                for line in latest_project.get("lines", []):
+                    metadata = line.get("generation_metadata") if isinstance(line.get("generation_metadata"), dict) else {}
+                    audio_name = Path(str(metadata.get("dry_output") or line.get("audio_file") or "")).name
+                    audio_path = output_dir() / audio_name if audio_name else None
+                    anchor_text = str(metadata.get("spoken_text") or line.get("text") or "").strip()
+                    if audio_path is not None and audio_path.is_file() and anchor_text:
+                        voice_anchors.setdefault(voice_lock_key(line), (audio_path, anchor_text))
             if (
                 project_id
                 and latest_project is not None
@@ -1022,6 +1096,27 @@ def create_app(model_dir: Path | None = None) -> FastAPI:
                     and checkpoint_project_revision not in {None, ""}
                 ):
                     project_expected_revision = int(checkpoint_project_revision)
+                if long_form_voice_lock:
+                    checkpoint_metadata = (
+                        checkpoint_result.get("metadata")
+                        if isinstance(checkpoint_result.get("metadata"), dict)
+                        else {}
+                    )
+                    checkpoint_name = Path(
+                        str(
+                            checkpoint_metadata.get("dry_output")
+                            or checkpoint_result.get("output")
+                            or ""
+                        )
+                    ).name
+                    checkpoint_audio = output_dir() / checkpoint_name if checkpoint_name else None
+                    checkpoint_text = str(
+                        checkpoint_metadata.get("spoken_text") or raw_item.get("text") or ""
+                    ).strip()
+                    if checkpoint_audio is not None and checkpoint_audio.is_file() and checkpoint_text:
+                        voice_anchors.setdefault(
+                            voice_lock_key(raw_item), (checkpoint_audio, checkpoint_text)
+                        )
             await websocket.send_json({
                 "type": "batch_start", "total": len(indexed_items),
                 "original_total": len(all_items), "resumed": bool(completed),
@@ -1032,6 +1127,7 @@ def create_app(model_dir: Path | None = None) -> FastAPI:
                     raise InterruptedError("批量生成已由用户取消。")
                 current_project_line_id = str(raw_item.get("line_id") or "")
                 current_line_key = current_project_line_id or index
+                _require_verified_reference_transcript(raw_item)
                 item, profile_reference = _apply_voice_profile(raw_item)
                 temporary: Path | None = None
                 reference = profile_reference
@@ -1041,6 +1137,24 @@ def create_app(model_dir: Path | None = None) -> FastAPI:
                     if temporary is not None:
                         temporary_paths.add(temporary)
                 request = _generation_request(item, reference)
+                requested_audio_effect = request.audio_effect
+                source_mode = request.mode
+                lock_key = voice_lock_key(item)
+                anchored_from: str | None = None
+                if (
+                    long_form_voice_lock
+                    and request.mode == "design"
+                    and request.ref_audio_path is None
+                    and lock_key in voice_anchors
+                ):
+                    anchor_audio, anchor_text = voice_anchors[lock_key]
+                    request = replace(
+                        request,
+                        mode="direction",
+                        ref_audio_path=anchor_audio,
+                        ref_text=anchor_text,
+                    )
+                    anchored_from = anchor_audio.name
                 request.validate()
                 await websocket.send_json(
                     {
@@ -1054,6 +1168,22 @@ def create_app(model_dir: Path | None = None) -> FastAPI:
                 output_path, metadata = await asyncio.to_thread(
                     runtime.generate, request, cancel_event=cancel_event
                 )
+                if long_form_voice_lock and request.ref_audio_path is None and request.mode == "design":
+                    dry_name = Path(str(metadata.get("dry_output") or output_path.name)).name
+                    dry_path = output_dir() / dry_name
+                    if not dry_path.is_file():
+                        raise RuntimeError("长文本首句干声音频丢失，无法安全锁定后续音色。")
+                    voice_anchors.setdefault(lock_key, (dry_path, request.text))
+                metadata["long_form_voice_lock"] = {
+                    "enabled": long_form_voice_lock,
+                    "key": lock_key,
+                    "anchor": anchored_from or (
+                        Path(str(metadata.get("dry_output") or output_path.name)).name
+                        if request.mode == "design" else None
+                    ),
+                    "anchored": anchored_from is not None,
+                    "source_mode": source_mode,
+                }
                 result = {
                     "index": index,
                     "output": output_path.name,
@@ -1061,6 +1191,7 @@ def create_app(model_dir: Path | None = None) -> FastAPI:
                     "role": item.get("role"),
                     "subtitle": item.get("subtitle"),
                     "line_id": current_project_line_id,
+                    "audio_effect": requested_audio_effect or {"preset": "none", "mix": 0.35},
                 }
                 results.append(result)
                 if project_id and current_project_line_id and not project_attachment_failed:

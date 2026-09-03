@@ -7,6 +7,7 @@ import uuid
 from copy import deepcopy
 from typing import Any
 
+from .audio_effects import normalize_audio_effect
 from .script_tools import parse_multi_role_script, parse_srt
 
 
@@ -51,6 +52,9 @@ def normalize_line(raw: dict[str, Any], order: int, *, cursor_ms: int = 0) -> di
         raise ValueError(f"第 {order} 句台词不能为空。")
     if len(text) > 20_000:
         raise ValueError(f"第 {order} 句台词超过 20000 字符。")
+    spoken_text = str(raw.get("spoken_text") or "").strip()
+    if len(spoken_text) > 20_000:
+        raise ValueError(f"第 {order} 句朗读文本超过 20000 字符。")
     language = str(raw.get("language") or "auto").lower()
     if language not in LANGUAGES:
         raise ValueError(f"第 {order} 句语言仅支持 auto、zh、en。")
@@ -87,12 +91,14 @@ def normalize_line(raw: dict[str, Any], order: int, *, cursor_ms: int = 0) -> di
         "voice_id": str(raw.get("voice_id") or "").strip(),
         "language": language,
         "text": text,
+        "spoken_text": spoken_text,
         "start_ms": start_ms,
         "end_ms": end_ms,
         "direction_mode": direction_mode,
         "direction_text": direction_text,
         "cfg_scale": cfg_scale,
         "seed": seed_value,
+        "audio_effect": normalize_audio_effect(raw.get("audio_effect")),
         "audio_file": str(raw.get("audio_file") or "").strip(),
         "generation_metadata": _json_object(raw.get("generation_metadata")),
         "generated_at": _integer(raw.get("generated_at"), 0),
@@ -245,7 +251,13 @@ def to_srt(project: dict[str, Any]) -> str:
 
 def effective_generation(line: dict[str, Any], voice: dict[str, Any], defaults: dict[str, Any]) -> dict[str, Any]:
     """Map per-line controls to native Breeze request fields without faking Index controls."""
-    merged = {**defaults, "text": line["text"], "voice_id": line.get("voice_id") or defaults.get("voice_id", "")}
+    merged = {
+        **defaults,
+        "text": line["text"],
+        "spoken_text": line.get("spoken_text") or "",
+        "audio_effect": line.get("audio_effect") or {"preset": "none", "mix": 0.35},
+        "voice_id": line.get("voice_id") or defaults.get("voice_id", ""),
+    }
     mode = str(voice.get("mode") or merged.get("mode") or "design")
     inherited = str(voice.get("instruction") or defaults.get("instruction") or "Speak clearly and naturally.")
     direction_mode = line.get("direction_mode", "inherit")

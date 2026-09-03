@@ -63,13 +63,13 @@ Get-ChildItem -LiteralPath (Join-Path $projectRoot 'models') -Force |
 if (Test-Path -LiteralPath (Join-Path $modelsStage 'Breeze-TTS-2')) {
     throw 'Model weights must not be embedded in the portable package staging directory.'
 }
-$whisperSource = Join-Path $projectRoot '.runtime\whisper-models\faster-whisper-small'
-$whisperTarget = Join-Path $modelsStage 'faster-whisper-small'
-$whisperFiles = @('.gitattributes', 'README.md', 'config.json', 'model.bin', 'tokenizer.json', 'vocabulary.txt')
+$whisperSource = Join-Path $projectRoot '.runtime\whisper-models\faster-whisper-large-v3'
+$whisperTarget = Join-Path $modelsStage 'faster-whisper-large-v3'
+$whisperFiles = @('.gitattributes', 'README.md', 'config.json', 'model.bin', 'preprocessor_config.json', 'tokenizer.json', 'vocabulary.json')
 foreach ($file in $whisperFiles) {
     $sourceFile = Join-Path $whisperSource $file
     if (-not (Test-Path -LiteralPath $sourceFile -PathType Leaf)) {
-        throw "Bundled Whisper Small model is missing $file. Run packaging\build_runtime.ps1 first."
+        throw "Bundled Whisper Large-v3 model is missing $file. Run packaging\build_runtime.ps1 first."
     }
 }
 New-Item -ItemType Directory -Force -Path $whisperTarget | Out-Null

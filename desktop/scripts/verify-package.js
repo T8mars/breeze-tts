@@ -25,10 +25,11 @@ const required = [
   "resources/backend/NOTICE",
   "resources/backend/requirements-desktop.lock.txt",
   "resources/backend/WHISPER_NOTICE.md",
-  "resources/backend/models/faster-whisper-small/config.json",
-  "resources/backend/models/faster-whisper-small/model.bin",
-  "resources/backend/models/faster-whisper-small/tokenizer.json",
-  "resources/backend/models/faster-whisper-small/vocabulary.txt",
+  "resources/backend/models/faster-whisper-large-v3/config.json",
+  "resources/backend/models/faster-whisper-large-v3/model.bin",
+  "resources/backend/models/faster-whisper-large-v3/preprocessor_config.json",
+  "resources/backend/models/faster-whisper-large-v3/tokenizer.json",
+  "resources/backend/models/faster-whisper-large-v3/vocabulary.json",
   "resources/backend/T8_DISTRIBUTION.md"
 ];
 for (const relative of required) {
@@ -85,11 +86,15 @@ for (const requiredServerControl of ["TrustedHostMiddleware", "Origin not allowe
     throw new Error(`Packaged loopback security control missing: ${requiredServerControl}`);
   }
 }
+const runtimeManagerPy = fs.readFileSync(path.join(root, "resources/backend/t8_runtime/runtime_manager.py"), "utf8");
+if (!runtimeManagerPy.includes('TORCHINDUCTOR_USE_STATIC_CUDA_LAUNCHER"] = "0"')) {
+  throw new Error("Packaged runtime is missing the Windows Triton pointer-width compatibility fix.");
+}
 const python = path.join(root, "resources/python/python.exe");
 const backend = path.join(root, "resources/backend");
 const smoke = spawnSync(
   python,
-  ["-c", "import torch,transformers,qwen_tts,faster_whisper,t8_runtime.server; from t8_runtime.transcription import bundled_whisper_small_available; assert bundled_whisper_small_available(); print(torch.__version__,transformers.__version__)"],
+  ["-c", "import importlib.metadata,torch,transformers,triton,qwen_tts,faster_whisper,t8_runtime.server; from torch.utils._triton import has_triton_package; from t8_runtime.transcription import bundled_whisper_large_available; assert bundled_whisper_large_available(); assert has_triton_package(); assert importlib.metadata.version('triton-windows') == '3.5.1.post24'; print(torch.__version__,transformers.__version__,triton.__version__)"],
   {
     cwd: backend,
     encoding: "utf8",

@@ -56,6 +56,7 @@ def collect_diagnostics() -> dict[str, Any]:
     package_names = [
         "torch",
         "torchaudio",
+        "triton-windows",
         "transformers",
         "qwen-tts",
         "accelerate",

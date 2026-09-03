@@ -13,6 +13,7 @@ from pathlib import Path
 EXPECTED = {
     "torch": "2.9.1",
     "torchaudio": "2.9.1",
+    "triton-windows": "3.5.1.post24",
     "transformers": "4.57.3",
     "qwen-tts": "0.1.1",
     "faster-whisper": "1.2.1",
@@ -51,7 +52,7 @@ def main() -> int:
         if actual.split("+")[0] != expected:
             errors.append(f"{package}: expected {expected}, got {actual}")
 
-    for module in ("torch", "torchaudio", "transformers", "qwen_tts", "fastapi", "uvicorn", "websockets", "soundfile", "faster_whisper"):
+    for module in ("torch", "torchaudio", "triton", "transformers", "qwen_tts", "fastapi", "uvicorn", "websockets", "soundfile", "faster_whisper"):
         try:
             importlib.import_module(module)
         except Exception as exc:
@@ -59,6 +60,10 @@ def main() -> int:
 
     try:
         import torch
+        from torch.utils._triton import has_triton_package
+
+        if not has_triton_package():
+            errors.append("PyTorch cannot discover the bundled Triton package")
         cuda = {
             "available": torch.cuda.is_available(),
             "runtime": torch.version.cuda,

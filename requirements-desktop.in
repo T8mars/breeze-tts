@@ -1,6 +1,7 @@
 # Official Breeze TTS 2 runtime contract
 torch==2.9.1
 torchaudio==2.9.1
+triton-windows==3.5.1.post24; platform_system == "Windows"
 qwen-tts==0.1.1
 transformers==4.57.3
 numpy>=2.0,<3

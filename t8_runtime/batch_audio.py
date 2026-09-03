@@ -9,6 +9,7 @@ from typing import Any
 import numpy as np
 import soundfile as sf
 
+from .audio_effects import apply_audio_effect, normalize_audio_effect
 from .config import SAMPLE_RATE, output_dir
 
 
@@ -26,10 +27,12 @@ def merge_batch_outputs(
         raise ValueError("没有可合并的批量输出。")
     clips = []
     for result in results:
-        path = Path(str(result["metadata"]["output"])).resolve()
+        metadata = result["metadata"]
+        path = Path(str(metadata.get("dry_output") or metadata["output"])).resolve()
         if not path.is_file():
             raise FileNotFoundError(f"批量输出不存在：{path}")
-        clips.append((result, _read_mono(path)))
+        effect = normalize_audio_effect(result.get("audio_effect"))
+        clips.append((result, apply_audio_effect(_read_mono(path), SAMPLE_RATE, effect), effect))
     if timeline:
         placements = []
         total_samples = 0
@@ -37,7 +40,7 @@ def merge_batch_outputs(
         timing_warnings: list[str] = []
         if timing_policy not in {"preserve", "overlay", "strict"}:
             raise ValueError("时间策略必须是 preserve、overlay 或 strict。")
-        for result, audio in clips:
+        for result, audio, _effect in clips:
             subtitle = result.get("subtitle") or {}
             requested_start = max(0, int(round(int(subtitle.get("start_ms", 0)) * SAMPLE_RATE / 1000)))
             requested_end = max(
@@ -71,7 +74,7 @@ def merge_batch_outputs(
     else:
         pause = np.zeros(int(SAMPLE_RATE * 0.2), dtype=np.float32)
         pieces = []
-        for index, (_result, audio) in enumerate(clips):
+        for index, (_result, audio, _effect) in enumerate(clips):
             if index:
                 pieces.append(pause)
             pieces.append(audio)
@@ -92,6 +95,7 @@ def merge_batch_outputs(
         "items": results,
         "timing_policy": timing_policy if timeline else None,
         "timing_warnings": timing_warnings if timeline else [],
+        "audio_effects": [effect for _result, _audio, effect in clips],
     }
     target.with_suffix(".json").write_text(
         json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8"

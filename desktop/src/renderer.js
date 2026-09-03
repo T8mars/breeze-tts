@@ -51,12 +51,13 @@ const MAX_REFERENCE_BYTES = 100 * 1024 * 1024;
 const MAX_REFERENCE_SECONDS = 60;
 const SUPPORTED_REFERENCE_EXTENSIONS = new Set(["wav", "flac", "ogg", "mp3"]);
 const PROJECT_DRAFT_KEY = "t8-breeze-dialogue-project-draft-v1";
+const PRONUNCIATION_ALIASES_KEY = "t8-breeze-pronunciation-aliases-v1";
 const PROJECT_DRAFT_DELAY_MS = 450;
 const TIMELINE_TRACK_RENDER_LIMIT = 120;
 const MIN_LINE_DURATION_MS = 50;
 const MAX_TIMELINE_MS = 24 * 60 * 60 * 1000;
 const LINE_GENERATION_DIRTY_FIELDS = new Set([
-  "text", "role", "voice_id", "language", "direction_mode", "direction_text",
+  "text", "spoken_text", "role", "voice_id", "language", "direction_mode", "direction_text",
   "cfg_scale", "seed", "instruction", "reference"
 ]);
 const GENERATION_CONFLICT_IDS = [
@@ -68,9 +69,16 @@ const GENERATION_CONFLICT_IDS = [
   "downloadModelButton",
   "cancelDownloadButton",
   "unloadButton",
-  "chooseOutputButton"
+  "chooseOutputButton",
+  "streamAudio",
+  "audioEffect",
+  "audioEffectMix",
+  "pronunciationAliases",
+  "referenceTranscriptVerified",
+  "applyWhisperDraftButton",
+  "dismissWhisperDraftButton"
 ];
-const VOICE_CONTROL_IDS = ["voiceSelect", "libraryVoiceSelect", "voiceName", "voiceMode", "voiceLanguage", "voiceInstruction", "voiceReferenceAudio", "voiceReferenceText", "voiceTags", "voiceNotes", "voicePreviewText", "voiceFavorite", "newVoiceButton", "applyVoiceButton", "saveVoiceButton", "updateVoiceButton", "deleteVoiceButton", "refreshVoicesButton", "exportVoiceButton", "importVoiceButton"];
+const VOICE_CONTROL_IDS = ["voiceSelect", "libraryVoiceSelect", "voiceName", "voiceMode", "voiceLanguage", "voiceInstruction", "voiceReferenceAudio", "voiceReferenceText", "voiceTranscriptVerified", "voiceWhisperDraftText", "applyVoiceWhisperDraftButton", "dismissVoiceWhisperDraftButton", "voiceTags", "voiceNotes", "voicePreviewText", "voiceFavorite", "newVoiceButton", "applyVoiceButton", "saveVoiceButton", "updateVoiceButton", "deleteVoiceButton", "refreshVoicesButton", "exportVoiceButton", "importVoiceButton"];
 const BATCH_CONTROL_IDS = ["batchKind", "batchInput", "defaultRole", "defaultRolePreset", "analyzeRolesButton", "loadBatchExampleButton", "clearBatchInputButton"];
 const CREATION_TEMPLATES = {
   blank: { tab: "generate", mode: "design" },
@@ -103,10 +111,60 @@ const DIRECTION_RECIPES = {
   tense: "紧张、警觉，保持适度压迫感",
   sad: "悲伤、内敛，保留克制的呼吸和停顿",
   whisper: "轻声、贴近耳语，但保持发音清楚",
-  documentary: "沉稳、客观，具有纪录片旁白的可信感"
+  documentary: "沉稳、客观，具有纪录片旁白的可信感",
+  angry: "愤怒、有压迫感，但不要喊破音",
+  mysterious: "神秘、克制，留出悬念和呼吸",
+  playful: "俏皮、灵动，语尾自然上扬",
+  resolute: "坚定、果断，重音清楚，结尾有力量",
+  tired: "疲惫、低能量，呼吸略重但吐字清楚",
+  tearful: "带有克制的哭腔和哽咽感，仍保持台词可懂"
 };
 const RECIPE_INTENSITY = { subtle: "情绪克制", natural: "情绪自然", strong: "情绪鲜明" };
 const RECIPE_PACE = { slow: "节奏舒缓", natural: "节奏自然", fast: "节奏紧凑" };
+const VOICE_PRESETS = {
+  warm_female: "一位温柔自然的年轻女性，声音柔和清晰，气息稳定，语气亲切，避免夸张和播音腔。",
+  clear_female: "一位清亮自信的年轻女性，声音通透，吐字清楚，节奏轻快，重点自然。",
+  young_male: "一位自然有活力的青年男性，声音干净，语速适中，表达真诚，不刻意压低声线。",
+  deep_male: "一位沉稳可信的成年男性，声线厚实但不浑浊，吐字清晰，节奏从容。",
+  childlike: "一位天真活泼、富有好奇感的少年声线，声音清楚自然，不尖锐，不夸张装嫩。",
+  elder_story: "一位阅历丰富的年长讲述者，声音温和沉稳，语速舒缓，停顿自然，有故事感。"
+};
+const SCENE_PRESETS = {
+  short_video: "适合短视频解说：开场快速抓住注意力，吐字清晰，节奏紧凑，重点词有适度强调，结尾利落。",
+  audiobook: "适合有声书：声音温暖耐听，叙事层次清楚，语速舒缓，人物与旁白自然区分，句间保留呼吸和画面感。",
+  advertisement: "适合广告口播：明快、自信、有感染力，卖点关键词有力度，节奏紧凑但不喊叫，结尾明确。",
+  documentary: "适合纪录片：沉稳、客观、可信，信息密度高时仍保持清楚，重点处适度停顿。",
+  news: "适合新闻播报：中性、准确、克制，吐字清晰，句式重心明确，不加入多余情绪。",
+  tutorial: "适合教程讲解：耐心、清楚、步骤感强，术语放慢，编号和关键操作适度停顿。",
+  customer_service: "适合客服与系统提示：礼貌、亲切、简洁，语速适中，数字和关键信息清楚。",
+  game_npc: "适合游戏角色台词：人物性格鲜明，情绪与动作自然衔接，保持台词清楚，避免过度舞台腔。",
+  bedtime: "适合睡前故事：轻柔、温暖、低刺激，语速慢，音量稳定，句间停顿更长。"
+};
+const AUDIO_EFFECT_GROUPS = [
+  ["基础", [["none", "原声"]]],
+  ["室内空间", [["small_room", "小房间"], ["bedroom", "卧室"], ["office", "办公室"], ["classroom", "教室"], ["studio", "录音棚"]]],
+  ["大型空间", [["hall", "大厅"], ["auditorium", "礼堂"], ["church", "教堂"], ["bathroom", "浴室"]]],
+  ["户外／特殊空间", [["mountain_echo", "山间回音"], ["valley", "峡谷远回声"], ["cave", "洞穴"], ["tunnel", "隧道"]]],
+  ["设备／传播", [["telephone", "电话通话"], ["walkie_talkie", "对讲机"], ["radio", "广播收音机"], ["megaphone", "扩音器"]]],
+  ["质感／创意", [["warm", "温暖质感"], ["bright", "明亮清晰"], ["muffled", "隔墙闷声"], ["dream", "梦境氛围"], ["robot", "机器人"]]]
+];
+const AUDIO_EFFECT_DEFAULT_MIX = {
+  none: 0.35, small_room: 0.25, bedroom: 0.25, office: 0.28, classroom: 0.30, studio: 0.20,
+  hall: 0.35, auditorium: 0.38, church: 0.42, bathroom: 0.38, mountain_echo: 0.45, valley: 0.46,
+  cave: 0.42, tunnel: 0.40, telephone: 0.75, walkie_talkie: 0.82, radio: 0.68, megaphone: 0.78,
+  warm: 0.42, bright: 0.35, muffled: 0.72, dream: 0.48, robot: 0.62
+};
+const AUDIO_EFFECT_DESCRIPTIONS = {
+  none: "原声：不进行后期处理。",
+  small_room: "室内空间：轻微短反射，适合近距离对白。", bedroom: "室内空间：柔和短混响。", office: "室内空间：稍硬的办公环境反射。",
+  classroom: "室内空间：中等房间反射。", studio: "室内空间：非常克制的棚内质感。", hall: "大型空间：较宽阔的大厅反射。",
+  auditorium: "大型空间：礼堂纵深与尾音。", church: "大型空间：较长、开阔的混响。", bathroom: "大型空间：明亮、密集的瓷砖反射。",
+  mountain_echo: "户外效果：明显的多次山间回声。", valley: "户外效果：更远、更长的峡谷回声。", cave: "特殊空间：密集而幽深的洞穴反射。",
+  tunnel: "特殊空间：狭长隧道反射。", telephone: "设备效果：限制频带并轻微压缩，模拟电话。", walkie_talkie: "设备效果：窄频带和较强压缩，模拟对讲机。",
+  radio: "设备效果：广播频带和温和压缩。", megaphone: "设备效果：更窄、更硬的扩音器质感。", warm: "质感效果：柔化高频并轻微增加密度。",
+  bright: "质感效果：增强清晰感和高频轮廓。", muffled: "质感效果：明显削弱高频，模拟隔墙听见。", dream: "创意效果：柔和高频并叠加多层短回声。",
+  robot: "创意效果：加入周期性机械调制。"
+};
 const INLINE_VOCAL_EVENT_ROLES = new Set(["笑", "咳嗽", "清嗓子", "叹气"]);
 const BATCH_EXAMPLES = {
   items: "欢迎使用 Breeze TTS 2，这是普通批量的第一句示例。\n第二句可以继续编辑，解析后会进入可调整的时间轴。\nThis is a real English batch example.",
@@ -181,6 +239,72 @@ function setActionMessage(target, text, kind = "") {
   element.classList.toggle("success-message", kind === "success");
   if (kind === "error") element.setAttribute("role", "alert");
   else element.setAttribute("role", "status");
+}
+
+function parsePronunciationAliases() {
+  const source = $("pronunciationAliases").value;
+  const aliases = [];
+  const seen = new Set();
+  source.split(/\r?\n/).forEach((raw, index) => {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) return;
+    const match = line.match(/^(.+?)\s*(?:=>|=|→)\s*(.+)$/);
+    if (!match) throw new Error(`读音词典第 ${index + 1} 行格式错误，请使用“原文 = 实际朗读内容”。`);
+    const original = match[1].trim();
+    const spoken = match[2].trim();
+    const key = original.toLowerCase();
+    if (!original || !spoken) throw new Error(`读音词典第 ${index + 1} 行不能留空。`);
+    if (seen.has(key)) throw new Error(`读音词典包含重复原文：${original}`);
+    seen.add(key);
+    aliases.push({ source: original, spoken, language: "auto" });
+  });
+  if (aliases.length > 500) throw new Error("读音词典不能超过 500 条。");
+  return aliases;
+}
+
+function persistPronunciationAliases() {
+  try {
+    const aliases = parsePronunciationAliases();
+    localStorage.setItem(PRONUNCIATION_ALIASES_KEY, $("pronunciationAliases").value);
+    setActionMessage("pronunciationStatus", `${aliases.length} 条规则已保存在本机；原文和字幕不会改变。`, "success");
+  } catch (error) {
+    setActionMessage("pronunciationStatus", errorMessage(error), "error");
+  }
+}
+
+function restorePronunciationAliases() {
+  try { $("pronunciationAliases").value = localStorage.getItem(PRONUNCIATION_ALIASES_KEY) || ""; }
+  catch (_) { $("pronunciationAliases").value = ""; }
+  persistPronunciationAliases();
+}
+
+function showTranscriptDraft(kind, result) {
+  const voice = kind === "voice";
+  const panel = $(voice ? "voiceWhisperDraftPanel" : "whisperDraftPanel");
+  const draft = $(voice ? "voiceWhisperDraftText" : "whisperDraftText");
+  const quality = $(voice ? "voiceWhisperDraftQuality" : "whisperDraftQuality");
+  draft.value = (result.segments || []).map((item) => item.text).join(" ").trim();
+  const probability = Number(result.language_probability);
+  const languageConfidence = Number.isFinite(probability) ? ` · 语言置信度 ${(probability * 100).toFixed(0)}%` : "";
+  const audioQuality = result.audio_quality || {};
+  const warnings = Array.isArray(audioQuality.warnings) ? audioQuality.warnings : [];
+  const health = warnings.length
+    ? `参考音频提醒：${warnings.join(" ")}`
+    : "基础电平、静音和削波检查未发现明显问题。";
+  quality.textContent = `Large-v3 · ${result.language || "自动识别"}${languageConfidence} · ${result.segments?.length || 0} 段。${health} 仍请确认没有音乐、混响或回声，并边听边逐字核对。`;
+  panel.hidden = false;
+}
+
+function applyTranscriptDraft(kind) {
+  const voice = kind === "voice";
+  const draft = $(voice ? "voiceWhisperDraftText" : "whisperDraftText").value.trim();
+  if (!draft) return;
+  $(voice ? "voiceReferenceText" : "referenceText").value = draft;
+  $(voice ? "voiceTranscriptVerified" : "referenceTranscriptVerified").checked = false;
+  setActionMessage(
+    voice ? "voiceReferenceStatus" : "whisperStatus",
+    "草稿已复制；请播放参考音频逐字修正，确认完全一致后再勾选核验。",
+  );
 }
 
 function setGlobalTask({ kind = "idle", kicker = "工作台", title = "准备创作", detail = "选择生成模式或导入脚本开始。", progress = null, target = "", cancellable = false } = {}) {
@@ -259,6 +383,57 @@ function applyDirectionRecipe(recipeId = state.selectedRecipe) {
   updateRecipeSelection();
   clearSelectedVoice("演绎配方已应用，当前切换为手动配置。");
   setActionMessage("directionRecipeStatus", `已应用“${document.querySelector(`.recipe-chip[data-recipe="${recipeId}"]`)?.textContent || recipeId}”配方，可直接生成或继续修改。`, "success");
+}
+
+function insertAtCursor(element, value) {
+  const start = Number.isInteger(element.selectionStart) ? element.selectionStart : element.value.length;
+  const end = Number.isInteger(element.selectionEnd) ? element.selectionEnd : start;
+  const before = element.value.slice(0, start);
+  const after = element.value.slice(end);
+  const prefix = before && !/\s$/.test(before) ? " " : "";
+  const suffix = after && !/^\s/.test(after) ? " " : "";
+  const insertion = `${prefix}${value}${suffix}`;
+  element.value = `${before}${insertion}${after}`;
+  const caret = start + insertion.length;
+  element.focus();
+  element.setSelectionRange(caret, caret);
+  element.dispatchEvent(new Event("input", { bubbles: true }));
+}
+
+function updateEffectPresetState() {
+  const preset = $("audioEffect").value;
+  $("audioEffectDescription").textContent = AUDIO_EFFECT_DESCRIPTIONS[preset] || "T8 后期效果；不会修改原始台词。";
+  document.querySelectorAll('[data-preset-kind="effect"]').forEach((button) => {
+    button.classList.toggle("active", button.dataset.presetValue === preset);
+  });
+}
+
+function applyCreativePreset(button) {
+  const kind = button.dataset.presetKind;
+  const value = button.dataset.presetValue;
+  if (kind === "event") {
+    insertAtCursor($("targetText"), value);
+    setActionMessage("creativePresetStatus", `已在光标处写入声音事件 ${value}；它会由 Breeze 模型直接演绎。`, "success");
+    return;
+  }
+  if (kind === "effect") {
+    $("audioEffect").value = value;
+    $("audioEffectMix").value = String(AUDIO_EFFECT_DEFAULT_MIX[value] ?? 0.35);
+    $("audioEffectMixValue").textContent = `${Math.round(Number($("audioEffectMix").value) * 100)}%`;
+    updateEffectPresetState();
+    setActionMessage("creativePresetStatus", `已选择“${button.textContent.trim()}”T8 后期效果；可在下方继续调整强度。`, "success");
+    return;
+  }
+  const instruction = kind === "voice" ? VOICE_PRESETS[value] : SCENE_PRESETS[value];
+  if (!instruction) return;
+  clearDirectionRecipe({ preserveInstruction: true });
+  if (kind === "voice") selectMode("design");
+  else if (state.mode === "clone") selectMode("direction");
+  $("instruction").value = instruction;
+  clearSelectedVoice(`${kind === "voice" ? "角色声线" : "内容场景"}预设已应用，当前切换为手动配置。`);
+  document.querySelectorAll(`[data-preset-kind="${kind}"]`).forEach((item) => item.classList.toggle("active", item === button));
+  setActionMessage("creativePresetStatus", `已把“${button.textContent.trim()}”完整指令写入，可继续手动修改。`, "success");
+  $("instruction").focus();
 }
 
 function updateProjectSaveState(text) {
@@ -381,6 +556,7 @@ function updateControlState() {
   }
   for (const control of document.querySelectorAll('#timelineBody input, #timelineBody select, #timelineBody textarea, #timelineBody button')) control.disabled = state.batching;
   for (const select of document.querySelectorAll('#roleMappingPanel select[data-role]')) select.disabled = state.batching;
+  for (const button of document.querySelectorAll('[data-preset-kind], .recipe-chip')) button.disabled = generationBusy;
   for (const block of document.querySelectorAll('#timelineTrack .timeline-block')) block.tabIndex = state.batching ? -1 : 0;
   for (const handle of document.querySelectorAll('#timelineTrack .timeline-handle')) handle.disabled = state.batching;
   $("timelineTrack")?.setAttribute("aria-disabled", String(state.batching));
@@ -433,12 +609,33 @@ function renderDiagnostics(data) {
   state.diagnostics = data;
   const gpu = data.gpu?.devices?.[0];
   const packages = data.packages || {};
+  const tritonVersion = packages["triton-windows"];
+  const fastAllReady = Boolean(
+    gpu
+    && Number(gpu.memory_total_mib || 0) >= 20 * 1024
+    && /^3\.5\./.test(String(tritonVersion || ""))
+    && data.runtime?.fast_all_available !== false
+  );
+  const fastOption = $("runtimeProfile")?.querySelector('option[value="fast"]');
+  if (fastOption) {
+    fastOption.disabled = !fastAllReady;
+    fastOption.textContent = fastAllReady
+      ? "Fast All 实验模式（24GB）"
+      : "Fast All 实验模式（环境未满足）";
+  }
+  if (!fastAllReady && $("runtimeProfile")?.value === "fast") $("runtimeProfile").value = "eager";
+  if ($("runtimeCompatibilityHint")) {
+    $("runtimeCompatibilityHint").textContent = fastAllReady
+      ? `Fast All 已就绪：Triton ${tritonVersion} · ${gpu.memory_total_mib} MiB 显存。Eager 仍是默认模式。`
+      : `Fast All 当前不可用：${!tritonVersion ? "缺少整合包内置 Triton" : "需要 Triton 3.5.x 与至少 20 GiB 显存"}；已自动选择 Eager。`;
+  }
   const entries = [
     ["GPU", gpu ? `${gpu.name} · ${formatBytes(gpu.memory_free_mib * 1024 ** 2)} 可用` : "未检测到 NVIDIA GPU", Boolean(gpu)],
     ["Python", `${data.python.version} · ${data.python.architecture}`, true],
     ["PyTorch", `${packages.torch || "缺失"} · CUDA ${gpu ? "可检测" : "不可用"}`, Boolean(packages.torch)],
     ["Transformers", packages.transformers || "缺失", transformersCompatible(packages.transformers)],
     ["Qwen TTS", packages["qwen-tts"] || "缺失", packages["qwen-tts"] === "0.1.1"],
+    ["Fast All / Triton", tritonVersion ? `${tritonVersion} · ${fastAllReady ? "可用" : "条件未满足"}` : "缺失 · 将使用 Eager", fastAllReady],
     ["模型运行时", data.runtime.loaded ? "已加载" : "按需加载", true]
   ];
   const cards = () => entries.map(([name, value, ready]) => {
@@ -480,11 +677,11 @@ function renderCapabilities(capabilities) {
     return item;
   }));
   $("whisperStatus").textContent = capabilities?.whisper
-    ? (capabilities?.whisper_small_bundled
-      ? "Whisper small 已随整合包内置，可直接离线转写；其他规格首次使用时联网下载并缓存。"
-      : "Whisper 引擎可用，但内置 small 模型缺失；可继续联网下载，建议重新下载完整整合包。")
+    ? (capabilities?.whisper_large_bundled
+      ? "Whisper Large-v3 已随整合包内置，可离线生成转写草稿；不会自动覆盖准确逐字稿。"
+      : "Whisper 引擎可用，但内置 Large-v3 模型缺失；请重新下载完整整合包。")
     : "内置 faster-whisper 组件缺失；请重新下载完整整合包，或点击下方按钮联网修复。";
-  $("installWhisperButton").hidden = Boolean(capabilities?.whisper) || state.whisperInstallComplete;
+  $("installWhisperButton").hidden = Boolean(capabilities?.whisper && capabilities?.whisper_large_bundled) || state.whisperInstallComplete;
   updateControlState();
 }
 
@@ -707,6 +904,7 @@ async function generate() {
   updateControlState();
   stopScheduledAudio();
   let socket;
+  let streamAudio = false;
   try {
     const reference = $("referenceAudio").files[0];
     const text = $("targetText").value.trim();
@@ -715,10 +913,14 @@ async function generate() {
     const cfgScale = Number($("cfgScale").value);
     const seed = Number($("seed").value);
     const maxNewTokens = Number($("maxTokens").value);
+    streamAudio = $("streamAudio").checked;
     const usesSavedVoice = Boolean(state.selectedVoiceId);
     if (!text) throw new Error("目标文本不能为空。");
     if (!usesSavedVoice && ["clone", "direction"].includes(state.mode) && (!reference || !referenceText)) {
       throw new Error("Voice Clone/Direction 必须提供参考音频和准确逐字稿。");
+    }
+    if (!usesSavedVoice && ["clone", "direction"].includes(state.mode) && !$("referenceTranscriptVerified").checked) {
+      throw new Error("请先播放参考音频，逐字核对参考稿并勾选“完全一致”。Whisper 草稿不能直接用于克隆。");
     }
     if (!usesSavedVoice && ["design", "direction"].includes(state.mode) && !instruction) {
       throw new Error("Voice Design/Direction 的演绎指令不能为空。");
@@ -738,12 +940,16 @@ async function generate() {
       text,
       instruction,
       reference_text: referenceText,
+      reference_transcript_verified: usesSavedVoice || $("referenceTranscriptVerified").checked,
       reference_filename: !usesSavedVoice && reference?.name ? reference.name : "reference.wav",
       reference_audio_base64: usesSavedVoice ? "" : await fileToBase64(reference),
       cfg_scale: cfgScale,
       seed,
       fast_all: $("runtimeProfile").value === "fast",
-      max_new_tokens: maxNewTokens
+      max_new_tokens: maxNewTokens,
+      stream_audio: streamAudio,
+      pronunciation_aliases: parsePronunciationAliases(),
+      audio_effect: { preset: $("audioEffect").value, mix: Number($("audioEffectMix").value) }
     };
     const scheme = location.protocol === "https:" ? "wss" : "ws";
     socket = new WebSocket(`${scheme}://${location.host}/ws/generate`);
@@ -762,13 +968,26 @@ async function generate() {
   }
   socket.onmessage = (event) => {
     if (event.data instanceof ArrayBuffer) {
+      if (!streamAudio) return;
       schedulePcm(event.data, 24000);
       $("generationStatus").textContent = "正在流式生成和播放…";
       setGlobalTask({ kind: "working", kicker: "单句生成", title: "正在生成并流式试听", detail: "可以切换分页查看其他内容，生成会继续进行。", progress: "indeterminate", target: "generate", cancellable: true });
       return;
     }
     const message = JSON.parse(event.data);
-    if (message.type === "complete") {
+    if (message.type === "start") {
+      const streaming = message.stream_audio === true;
+      $("generationStatus").textContent = streaming ? "正在流式生成和播放…" : "正在生成完整音频…";
+      setGlobalTask({
+        kind: "working",
+        kicker: "单句生成",
+        title: streaming ? "正在生成并流式试听" : "正在生成完整音频",
+        detail: streaming ? "音频会边生成边播放，完成后仍会保存 WAV。" : "流式试听已关闭；完整 WAV 生成后会自动载入结果播放器。",
+        progress: "indeterminate",
+        target: "generate",
+        cancellable: true
+      });
+    } else if (message.type === "complete") {
       const url = `/api/outputs/${encodeURIComponent(message.output)}`;
       $("outputAudio").src = url;
       $("downloadOutput").href = url;
@@ -956,6 +1175,7 @@ function applySelectedVoice() {
   clearDirectionRecipe({ preserveInstruction: true });
   $("instruction").value = voice.instruction || "";
   $("referenceText").value = voice.reference_text || "";
+  $("referenceTranscriptVerified").checked = Boolean(voice.has_reference);
   $("referenceAudio").value = "";
   if (state.referencePreviewUrl) URL.revokeObjectURL(state.referencePreviewUrl);
   state.referencePreviewUrl = null;
@@ -1006,6 +1226,8 @@ async function previewVoiceReferenceFile() {
   $("voiceReferencePreview").src = state.voiceReferencePreviewUrl;
   $("voiceReferencePreview").hidden = false;
   state.voiceClearReference = false;
+  $("voiceTranscriptVerified").checked = false;
+  $("voiceWhisperDraftPanel").hidden = true;
   $("voiceReferenceStatus").textContent = `待保存的新参考音频：${file.name} · ${duration.toFixed(1)} 秒。`;
   updateControlState();
 }
@@ -1043,6 +1265,8 @@ function beginNewVoice(message = "当前为新建模式：填写名称，上传�
   $("voiceLanguage").value = "auto";
   $("voiceInstruction").value = "";
   $("voiceReferenceText").value = "";
+  $("voiceTranscriptVerified").checked = false;
+  $("voiceWhisperDraftPanel").hidden = true;
   $("voiceTags").value = "";
   $("voiceNotes").value = "";
   $("voicePreviewText").value = "你好，这是一段音色库试听。";
@@ -1070,6 +1294,7 @@ function selectLibraryVoice() {
   $("voiceLanguage").value = voice.language || "auto";
   $("voiceInstruction").value = voice.instruction || "";
   $("voiceReferenceText").value = voice.reference_text || "";
+  $("voiceTranscriptVerified").checked = Boolean(voice.has_reference);
   $("voiceTags").value = (voice.tags || []).join(", ");
   $("voiceNotes").value = voice.notes || "";
   $("voicePreviewText").value = voice.preview_text || "你好，这是一段音色库试听。";
@@ -1111,6 +1336,9 @@ async function saveCurrentVoice() {
   if (["clone", "direction"].includes(mode) && (!reference || !referenceText)) {
     throw new Error("保存 Clone/Direction 音色必须选择参考音频并填写准确逐字稿。");
   }
+  if (["clone", "direction"].includes(mode) && !$("voiceTranscriptVerified").checked) {
+    throw new Error("请逐字核对参考稿并勾选“完全一致”后再保存音色。");
+  }
   if (reference) await inspectReferenceAudio(reference);
   const created = await api("/api/voices", {
     method: "POST",
@@ -1119,6 +1347,7 @@ async function saveCurrentVoice() {
       mode,
       instruction: $("voiceInstruction").value.trim(),
       reference_text: referenceText,
+      reference_transcript_verified: $("voiceTranscriptVerified").checked,
       reference_filename: reference?.name || "reference.wav",
       reference_audio_base64: await fileToBase64(reference),
       ...voiceMetadata()
@@ -1144,6 +1373,9 @@ async function updateSelectedVoice() {
   if (["clone", "direction"].includes(mode) && (!willHaveReference || !referenceText)) {
     throw new Error("Clone/Direction 音色必须保留参考音频并填写准确逐字稿。");
   }
+  if (["clone", "direction"].includes(mode) && !$("voiceTranscriptVerified").checked) {
+    throw new Error("请逐字核对参考稿并勾选“完全一致”后再保存修改。");
+  }
   if (reference) await inspectReferenceAudio(reference);
   const updated = await api(`/api/voices/${encodeURIComponent(voice.id)}`, {
     method: "PATCH",
@@ -1152,6 +1384,7 @@ async function updateSelectedVoice() {
       mode,
       instruction: $("voiceInstruction").value.trim(),
       reference_text: referenceText,
+      reference_transcript_verified: $("voiceTranscriptVerified").checked,
       reference_filename: reference?.name || "reference.wav",
       reference_audio_base64: await fileToBase64(reference),
       clear_reference: state.voiceClearReference,
@@ -1204,20 +1437,20 @@ async function transcribeReference() {
   await inspectReferenceAudio(reference);
   state.transcribing = true;
   updateControlState();
-  const bundled = $("whisperModel").value === "small" && state.capabilities.whisper_small_bundled;
-  $("whisperStatus").textContent = bundled ? "正在使用整合包内置 Whisper small 转写…" : "正在下载或加载所选 Whisper 模型…";
+  $("whisperStatus").textContent = "正在使用整合包内置 Whisper Large-v3 生成草稿…";
   try {
     const result = await api("/api/tools/transcribe", {
       method: "POST",
       body: JSON.stringify({
         reference_filename: reference.name,
         reference_audio_base64: await fileToBase64(reference),
-        model_size: $("whisperModel").value,
+        model_size: "large-v3",
         language: $("whisperLanguage").value.trim() || null
       })
     });
-    $("referenceText").value = (result.segments || []).map((item) => item.text).join(" ").trim();
-    $("whisperStatus").textContent = `转写完成 · ${result.language || "自动识别"} · ${result.segments?.length || 0} 段 · ${result.device || "unknown"}`;
+    showTranscriptDraft("generation", result);
+    $("referenceTranscriptVerified").checked = false;
+    $("whisperStatus").textContent = `Large-v3 草稿已生成 · ${result.device || "unknown"}；不会自动覆盖准确逐字稿。`;
   } finally {
     state.transcribing = false;
     updateControlState();
@@ -1396,15 +1629,20 @@ async function currentBatchDefaults() {
     mode: state.mode,
     instruction: $("instruction").value.trim(),
     reference_text: $("referenceText").value.trim(),
+    reference_transcript_verified: Boolean(state.selectedVoiceId) || $("referenceTranscriptVerified").checked,
     cfg_scale: cfgScale,
     seed,
     fast_all: $("runtimeProfile").value === "fast",
-    max_new_tokens: maxNewTokens
+    max_new_tokens: maxNewTokens,
+    pronunciation_aliases: parsePronunciationAliases()
   };
   if (state.selectedVoiceId) return { ...defaults, voice_id: state.selectedVoiceId };
   const reference = $("referenceAudio").files[0];
   if (["clone", "direction"].includes(state.mode) && (!reference || !defaults.reference_text)) {
     throw new Error("当前批量默认配置需要参考音频和准确逐字稿，或选择一个已保存音色。");
+  }
+  if (["clone", "direction"].includes(state.mode) && !$("referenceTranscriptVerified").checked) {
+    throw new Error("批量克隆前请逐字核对参考稿并勾选“完全一致”，或选择已保存音色。");
   }
   if (["design", "direction"].includes(state.mode) && !defaults.instruction) throw new Error("演绎指令不能为空。");
   if (reference) await inspectReferenceAudio(reference);
@@ -1480,6 +1718,9 @@ async function runBatchPayload(payload, { resumeJobId = "", singleLineId = "" } 
     return;
   }
   const singleLineRun = Boolean(singleLineId);
+  if (!resumeJobId && payload && typeof payload === "object") {
+    payload.long_form_voice_lock = $("longFormVoiceLock")?.checked !== false;
+  }
   state.batching = true;
   state.batchTotal = 0;
   state.batchCompleted = 0;
@@ -1662,20 +1903,20 @@ async function transcribeVoiceReference() {
   await inspectReferenceAudio(reference);
   state.transcribing = true;
   updateControlState();
-  const bundled = $("whisperModel").value === "small" && state.capabilities.whisper_small_bundled;
-  $("voiceReferenceStatus").textContent = bundled ? "正在使用整合包内置 Whisper small 识别参考音频…" : "正在下载或加载所选 Whisper 模型…";
+  $("voiceReferenceStatus").textContent = "正在使用整合包内置 Whisper Large-v3 生成草稿…";
   try {
     const result = await api("/api/tools/transcribe", {
       method: "POST",
       body: JSON.stringify({
         reference_filename: reference.name,
         reference_audio_base64: await fileToBase64(reference),
-        model_size: $("whisperModel").value,
+        model_size: "large-v3",
         language: $("voiceLanguage").value === "auto" ? null : $("voiceLanguage").value
       })
     });
-    $("voiceReferenceText").value = (result.segments || []).map((item) => item.text).join(" ").trim();
-    $("voiceReferenceStatus").textContent = `逐字稿已填写 · ${result.language || "自动识别"} · ${result.segments?.length || 0} 段；请核对后保存。`;
+    showTranscriptDraft("voice", result);
+    $("voiceTranscriptVerified").checked = false;
+    $("voiceReferenceStatus").textContent = "Large-v3 草稿已生成；不会自动覆盖准确逐字稿。";
   } finally {
     state.transcribing = false;
     updateControlState();
@@ -1691,12 +1932,14 @@ async function startBatch() {
     const defaults = await currentBatchDefaults();
     const items = linesToGenerate.map((line) => ({
       text: line.text,
+      spoken_text: line.spoken_text || "",
       role: line.role,
       voice_id: line.voice_id || defaults.voice_id,
       direction_mode: line.direction_mode,
       direction_text: line.direction_text,
       cfg_scale: line.cfg_scale ?? defaults.cfg_scale,
       seed: line.seed ?? defaults.seed,
+      audio_effect: line.audio_effect || { preset: "none", mix: 0.35 },
       subtitle: { index: line.order, start_ms: line.start_ms, end_ms: line.end_ms, text: line.text },
       line_id: line.line_id
     }));
@@ -1838,7 +2081,7 @@ async function launchStudio(templateId = "blank") {
     });
     $("launcherView").hidden = true;
     $("studioView").hidden = false;
-    $("runtimeSummary").textContent = `${runtime.fast_all ? "Fast All" : "Eager"} · 24 kHz · 模型已加载`;
+    $("runtimeSummary").textContent = `${runtime.fast_all ? "Fast All" : "Eager"} · 24 kHz · 模型已加载${runtime.fast_all_fallback_reason ? ` · ${runtime.fast_all_fallback_reason}` : ""}`;
     applyCreationTemplate(templateId);
     $("quickLaunchFeedback").hidden = true;
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1900,13 +2143,51 @@ function lineVoiceSelect(line) {
   return select;
 }
 
+function lineEffectEditor(line) {
+  const effect = line.audio_effect || { preset: "none", mix: 0.35 };
+  const wrapper = document.createElement("div");
+  wrapper.className = "line-effect-editor";
+  const select = document.createElement("select");
+  select.dataset.field = "audio_effect";
+  select.dataset.part = "preset";
+  select.disabled = state.batching;
+  for (const [groupLabel, presets] of AUDIO_EFFECT_GROUPS) {
+    const group = document.createElement("optgroup");
+    group.label = groupLabel;
+    for (const [optionValue, label] of presets) {
+      const option = document.createElement("option");
+      option.value = optionValue;
+      option.textContent = label;
+      option.selected = (effect.preset || "none") === optionValue;
+      group.append(option);
+    }
+    select.append(group);
+  }
+  select.setAttribute("aria-label", `第 ${line.order} 句空间声场`);
+  const mix = document.createElement("input");
+  mix.type = "range";
+  mix.min = "0";
+  mix.max = "1";
+  mix.step = "0.05";
+  mix.value = String(Number.isFinite(Number(effect.mix)) ? Number(effect.mix) : 0.35);
+  mix.dataset.field = "audio_effect";
+  mix.dataset.part = "mix";
+  mix.disabled = state.batching;
+  mix.setAttribute("aria-label", `第 ${line.order} 句空间效果强度`);
+  const value = document.createElement("small");
+  value.className = "effect-mix-value";
+  value.textContent = `${Math.round(Number(mix.value) * 100)}%`;
+  wrapper.append(select, mix, value);
+  return wrapper;
+}
+
 function fieldInput(line, field, type = "text") {
   const input = document.createElement(type === "textarea" ? "textarea" : "input");
   if (input instanceof HTMLInputElement) input.type = type;
   input.dataset.field = field;
   input.disabled = state.batching;
   input.value = line[field] ?? "";
-  const labels = { role: "角色", start_ms: "开始时间", end_ms: "结束时间", text: "台词", direction_text: "演绎指令" };
+  const labels = { role: "角色", start_ms: "开始时间", end_ms: "结束时间", text: "台词", spoken_text: "实际朗读文本", direction_text: "演绎指令" };
   input.setAttribute("aria-label", `第 ${line.order} 句${labels[field] || field}`);
   return input;
 }
@@ -2078,15 +2359,20 @@ function renderTimeline() {
     const endInput = fieldInput(line, "end_ms", "number"); endInput.min = String(MIN_LINE_DURATION_MS); endInput.max = String(MAX_TIMELINE_MS); endInput.step = String(timelineSnapMs());
     const startCell = tableCell("开始 ms", startInput);
     const endCell = tableCell("结束 ms", endInput);
-    const textCell = tableCell("台词", fieldInput(line, "text", "textarea"));
+    const textEditor = document.createElement("div"); textEditor.className = "line-text-editor";
+    const displayText = fieldInput(line, "text", "textarea");
+    const spokenText = fieldInput(line, "spoken_text", "textarea"); spokenText.placeholder = "可选：生僻字替换后的实际朗读文本";
+    textEditor.append(displayText, spokenText);
+    const textCell = tableCell("台词／实际朗读", textEditor);
     const directionMode = document.createElement("select"); directionMode.dataset.field = "direction_mode"; directionMode.disabled = state.batching; directionMode.setAttribute("aria-label", `第 ${line.order} 句演绎模式`);
     for (const [value, label] of [["inherit", "继承音色"], ["override", "逐句覆盖"], ["neutral", "中性"]]) { const option = document.createElement("option"); option.value = value; option.textContent = label; option.selected = line.direction_mode === value; directionMode.append(option); }
     const directionText = fieldInput(line, "direction_text"); directionText.placeholder = "例如：压低声音，克制而悲伤";
     const directionCell = tableCell("逐句演绎", directionMode, directionText);
+    const effectCell = tableCell("空间声场", lineEffectEditor(line));
     const resultCell = tableCell("状态 / 最新结果", lineResultView(line)); resultCell.classList.add("line-result-cell");
     const actions = tableCell("操作"); actions.classList.add("line-controls");
     for (const [action, label] of [["up", "上移"], ["down", "下移"], ["single", "生成该句"], ["delete", "删除"]]) { const button = document.createElement("button"); button.type = "button"; button.className = action === "delete" ? "danger" : "secondary"; button.dataset.action = action; button.textContent = label; button.disabled = state.batching; button.setAttribute("aria-label", `第 ${line.order} 句${label}`); actions.append(button); }
-    row.append(indexCell, roleCell, voiceCell, languageCell, startCell, endCell, textCell, directionCell, resultCell, actions);
+    row.append(indexCell, roleCell, voiceCell, languageCell, startCell, endCell, textCell, directionCell, effectCell, resultCell, actions);
     tableFragment.append(row);
   }
   body.append(tableFragment);
@@ -2110,10 +2396,11 @@ function renderTimeline() {
 
 function markLineChanged(line, field) {
   const timing = ["start_ms", "end_ms"].includes(field);
+  const remixOnly = timing || field === "audio_effect";
   const dirty = new Set(line.dirty_fields || []);
-  dirty.add(timing ? "timing" : field);
+  dirty.add(timing ? "timing" : field === "audio_effect" ? "mix" : field);
   line.dirty_fields = [...dirty];
-  line.status = timing ? line.status : "pending";
+  line.status = remixOnly ? line.status : "pending";
   state.dialogueProject.revision += 1;
   markProjectDirty();
   updateTimelineSummary();
@@ -2168,7 +2455,7 @@ function addDialogueLine() {
   if (!state.dialogueProject) state.dialogueProject = { schema_version: 2, project_id: crypto.randomUUID().replaceAll("-", ""), revision: 0, name: "未命名对白工程", timing: { policy: "preserve", gap_ms: 200, snap_ms: 50 }, lines: [] };
   const last = state.dialogueProject.lines.at(-1);
   const start = last ? last.end_ms + 200 : 0;
-  state.dialogueProject.lines.push({ line_id: crypto.randomUUID().replaceAll("-", ""), order: state.dialogueProject.lines.length + 1, role: "旁白", voice_id: "", language: "auto", text: "新台词", start_ms: start, end_ms: start + 1200, direction_mode: "inherit", direction_text: "", cfg_scale: null, seed: null, audio_file: "", dirty_fields: ["text"], status: "pending", error: "" });
+  state.dialogueProject.lines.push({ line_id: crypto.randomUUID().replaceAll("-", ""), order: state.dialogueProject.lines.length + 1, role: "旁白", voice_id: "", language: "auto", text: "新台词", spoken_text: "", start_ms: start, end_ms: start + 1200, direction_mode: "inherit", direction_text: "", cfg_scale: null, seed: null, audio_effect: { preset: "none", mix: 0.35 }, audio_file: "", dirty_fields: ["text"], status: "pending", error: "" });
   state.dialogueProject.revision += 1;
   state.selectedLineId = state.dialogueProject.lines.at(-1).line_id;
   renderRoleMappings(state.dialogueProject.lines.map((line) => line.role));
@@ -2494,8 +2781,11 @@ $("voiceReferenceAudio").addEventListener("change", () => previewVoiceReferenceF
   $("voiceReferenceStatus").textContent = error.message;
   updateControlState();
 }));
+$("voiceReferenceText").addEventListener("input", () => { $("voiceTranscriptVerified").checked = false; });
 $("voiceClearReferenceButton").addEventListener("click", markVoiceReferenceForRemoval);
 $("voiceTranscribeButton").addEventListener("click", () => transcribeVoiceReference().catch((error) => { $("voiceReferenceStatus").textContent = error.message; }));
+$("applyVoiceWhisperDraftButton").addEventListener("click", () => applyTranscriptDraft("voice"));
+$("dismissVoiceWhisperDraftButton").addEventListener("click", () => { $("voiceWhisperDraftPanel").hidden = true; });
 $("historySearch").addEventListener("input", () => { state.historyPage = 1; renderHistory(); });
 $("historyKind").addEventListener("change", () => { state.historyPage = 1; renderHistory(); });
 $("historyPrevious").addEventListener("click", () => { state.historyPage -= 1; renderHistory(); });
@@ -2514,6 +2804,11 @@ $("verifyModelButton").addEventListener("click", () => verifyCurrentModel().catc
 $("cancelDownloadButton").addEventListener("click", () => api("/api/models/download/cancel", { method: "POST" }).catch((error) => { $("downloadStatus").textContent = error.message; }));
 $("generateButton").addEventListener("click", () => generate().catch((error) => { $("generationStatus").textContent = error.message; }));
 $("cancelGenerateButton").addEventListener("click", cancelGeneration);
+$("streamAudio").addEventListener("change", () => {
+  $("streamAudioStatus").textContent = $("streamAudio").checked
+    ? "已开启：音频会边生成边播放，最终仍保存完整 WAV。"
+    : "默认关闭：生成完整 WAV 后再提供试听与下载。";
+});
 $("unloadButton").addEventListener("click", async () => {
   if (state.generating || state.batching) return;
   try {
@@ -2538,6 +2833,7 @@ $("instruction").addEventListener("input", () => {
   if ($("instruction").value !== state.recipeAppliedInstruction && state.selectedRecipe) clearDirectionRecipe({ preserveInstruction: true });
 });
 document.querySelectorAll(".recipe-chip").forEach((button) => button.addEventListener("click", () => applyDirectionRecipe(button.dataset.recipe)));
+document.querySelectorAll("[data-preset-kind]").forEach((button) => button.addEventListener("click", () => applyCreativePreset(button)));
 $("recipeIntensity").addEventListener("change", () => state.selectedRecipe && applyDirectionRecipe());
 $("recipePace").addEventListener("change", () => state.selectedRecipe && applyDirectionRecipe());
 $("clearDirectionRecipeButton").addEventListener("click", () => clearDirectionRecipe());
@@ -2549,9 +2845,14 @@ $("globalTaskCancelButton").addEventListener("click", () => {
   if (state.batching) cancelBatch();
   else if (state.generating) cancelGeneration();
 });
-$("referenceText").addEventListener("input", () => clearSelectedVoice());
+$("referenceText").addEventListener("input", () => { clearSelectedVoice(); $("referenceTranscriptVerified").checked = false; });
 $("transcribeButton").addEventListener("click", () => transcribeReference().catch((error) => { $("whisperStatus").textContent = error.message; }));
+$("applyWhisperDraftButton").addEventListener("click", () => applyTranscriptDraft("generation"));
+$("dismissWhisperDraftButton").addEventListener("click", () => { $("whisperDraftPanel").hidden = true; });
 $("installWhisperButton").addEventListener("click", () => installWhisperComponent().catch((error) => { $("whisperStatus").textContent = error.message; }));
+$("pronunciationAliases").addEventListener("change", persistPronunciationAliases);
+$("audioEffect").addEventListener("change", updateEffectPresetState);
+$("audioEffectMix").addEventListener("input", () => { $("audioEffectMixValue").textContent = `${Math.round(Number($("audioEffectMix").value) * 100)}%`; });
 $("batchKind").addEventListener("change", updateBatchKind);
 $("batchInput").addEventListener("input", updateDetectedRoles);
 $("defaultRolePreset").addEventListener("change", applyDefaultRolePreset);
@@ -2616,6 +2917,15 @@ $('timelineBody').addEventListener('input', (event) => {
   const row = event.target.closest('tr');
   const line = state.dialogueProject?.lines.find((item) => item.line_id === row?.dataset.lineId);
   if (!field || !line) return;
+  if (field === "audio_effect") {
+    const part = event.target.dataset.part;
+    line.audio_effect = { ...(line.audio_effect || { preset: "none", mix: 0.35 }) };
+    line.audio_effect[part] = part === "mix" ? Number(event.target.value) : event.target.value;
+    const label = event.target.closest(".line-effect-editor")?.querySelector(".effect-mix-value");
+    if (label) label.textContent = `${Math.round(Number(line.audio_effect.mix) * 100)}%`;
+    markLineChanged(line, "audio_effect");
+    return;
+  }
   const timingField = ['start_ms', 'end_ms'].includes(field);
   line[field] = timingField ? Math.max(0, Number(event.target.value) || 0) : event.target.value;
   markLineChanged(line, field);
@@ -2634,6 +2944,14 @@ $('timelineBody').addEventListener('change', (event) => {
   const row = event.target.closest('tr');
   const line = state.dialogueProject?.lines.find((item) => item.line_id === row?.dataset.lineId);
   if (!field || !line) return;
+  if (field === "audio_effect") {
+    const part = event.target.dataset.part;
+    line.audio_effect = { ...(line.audio_effect || { preset: "none", mix: 0.35 }) };
+    line.audio_effect[part] = part === "mix" ? Number(event.target.value) : event.target.value;
+    markLineChanged(line, "audio_effect");
+    renderTimeline();
+    return;
+  }
   const timingField = ['start_ms', 'end_ms'].includes(field);
   const value = timingField ? Math.max(0, Number(event.target.value) || 0) : event.target.value;
   if (line[field] !== value) { line[field] = value; markLineChanged(line, field); }
@@ -2685,6 +3003,8 @@ $('timelineBody').addEventListener('click', async (event) => {
 });
 $("referenceAudio").addEventListener("change", async () => {
   clearSelectedVoice();
+  $("referenceTranscriptVerified").checked = false;
+  $("whisperDraftPanel").hidden = true;
   const validationId = ++state.referenceValidationId;
   if (state.referencePreviewUrl) URL.revokeObjectURL(state.referencePreviewUrl);
   const file = $("referenceAudio").files[0];
@@ -2723,6 +3043,7 @@ window.addEventListener("beforeunload", (event) => {
 document.addEventListener("visibilitychange", () => { if (document.hidden) persistProjectDraft(); });
 
 refresh().finally(() => {
+  restorePronunciationAliases();
   restoreProjectDraft();
   updateContinueDraftTemplate();
 });
@@ -2730,4 +3051,5 @@ window.t8Desktop?.onUpdateStatus(renderUpdateStatus);
 window.t8Desktop?.updateStatus().then(renderUpdateStatus).catch((error) => { $("updateStatus").textContent = error.message; });
 selectMode("design");
 updateBatchKind();
+updateEffectPresetState();
 updateControlState();
