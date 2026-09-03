@@ -14,9 +14,9 @@
 > [!NOTE]
 > This workspace also contains the unofficial **T8star-Aix Voice Studio** Windows portable integration and the user-requested `comfyui-breeze-tts-T8` node package. See [`T8_DISTRIBUTION.md`](T8_DISTRIBUTION.md) and [`roadmap.md`](roadmap.md). These additions are not affiliated with or endorsed by BreezeBlue.
 
-### T8star-Aix Voice Studio 0.2.8
+### T8star-Aix Voice Studio 0.2.9
 
-The Windows integration uses an IndexTTS 2.5-inspired light launcher and functional workbench. Version 0.2.8 bundles `faster-whisper` and the pinned Whisper Small checkpoint for offline default transcription, fixes the managed-runtime repair installer, adds runnable examples for every batch format, and resets the Voice Library cleanly after deletion. Voice Library 2.1 provides its own reference-audio upload, stored-reference playback, accurate transcript, replacement/removal controls, and one-click reuse in generation. Inline vocal events remain available in the desktop bundle and all four ComfyUI workflows, while the editable timeline retains per-line rerun, project backfill, revision-safe synchronization, and automatic full-timeline remix.
+The Windows integration uses an IndexTTS 2.5-inspired light launcher and functional workbench. Version 0.2.9 adds separate, allowlisted GitHub, Hugging Face, Bilibili, and YouTube creator links to the desktop launcher and distribution documentation. It retains the bundled `faster-whisper` runtime and pinned Whisper Small checkpoint for offline default transcription, runnable batch examples, the complete reference-audio Voice Library 2.1, inline vocal events, and revision-safe editable timelines with per-line rerun and automatic full-timeline remix.
 
 ### T8star-Aix 社媒与资源
 
