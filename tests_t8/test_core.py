@@ -151,6 +151,17 @@ def test_runtime_refuses_unload_while_generation_is_locked(tmp_path):
         runtime._generation_lock.release()
 
 
+def test_runtime_allows_reconfirming_active_model_while_generation_is_locked(tmp_path):
+    model = tmp_path / "model"
+    runtime = RuntimeManager(model)
+    runtime._generation_lock.acquire()
+    try:
+        runtime.select_model_dir(model)
+        assert runtime.model_dir == model.resolve()
+    finally:
+        runtime._generation_lock.release()
+
+
 def test_token_aware_long_text_splitter_preserves_text():
     class CharacterTokenizer:
         def __call__(self, text, **_kwargs):

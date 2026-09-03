@@ -196,6 +196,11 @@ class RuntimeManager:
 
     def select_model_dir(self, model_dir: Path) -> None:
         target = Path(model_dir).expanduser().resolve()
+        # Re-confirming the directory that is already active is an idempotent UI
+        # action.  It must not be rejected just because a generation currently
+        # owns the model lock, and it must not unload a model that is in use.
+        if target == self.model_dir:
+            return
         if not self._generation_lock.acquire(blocking=False):
             raise RuntimeError("正在生成，无法切换模型；请先取消或等待任务结束。")
         try:

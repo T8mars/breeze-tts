@@ -410,6 +410,12 @@ function renderModel(report) {
   }
 }
 
+function rememberActiveModel(report, runtime = null) {
+  state.diagnostics = state.diagnostics || {};
+  state.diagnostics.model = report;
+  if (runtime) state.diagnostics.runtime = runtime;
+}
+
 function renderDiagnostics(data) {
   state.diagnostics = data;
   const gpu = data.gpu?.devices?.[0];
@@ -777,12 +783,18 @@ async function chooseModelDirectory() {
     const report = await api("/api/models/validate", { method: "POST", body: JSON.stringify({ model_dir: selected }) });
     renderModel(report);
     if (report.valid && (report.license_accepted || $("acceptLicense").checked)) {
-      const selectedReport = await api("/api/models/select", {
-        method: "POST",
-        body: JSON.stringify({ model_dir: selected, accept_model_license: $("acceptLicense").checked })
-      });
-      await window.t8Desktop.saveDirectorySetting("modelDirectory", selected);
-      renderModel(selectedReport.model);
+      try {
+        const selectedReport = await api("/api/models/select", {
+          method: "POST",
+          body: JSON.stringify({ model_dir: selected, accept_model_license: $("acceptLicense").checked })
+        });
+        await window.t8Desktop.saveDirectorySetting("modelDirectory", selected);
+        rememberActiveModel(selectedReport.model, selectedReport.runtime);
+        renderModel(selectedReport.model);
+      } catch (error) {
+        await refresh().catch(() => {});
+        throw error;
+      }
     } else if (report.valid) {
       $("downloadStatus").textContent = "模型完整；勾选许可证后再次选择此目录以启用。";
     }
@@ -813,16 +825,25 @@ async function downloadModel() {
 }
 
 async function activateCurrentModel() {
-  const result = await api("/api/models/select", {
-    method: "POST",
-    body: JSON.stringify({
-      model_dir: $("modelPath").value.trim(),
-      verify_hashes: false,
-      accept_model_license: $("acceptLicense").checked
-    })
-  });
+  let result;
+  try {
+    result = await api("/api/models/select", {
+      method: "POST",
+      body: JSON.stringify({
+        model_dir: $("modelPath").value.trim(),
+        verify_hashes: false,
+        accept_model_license: $("acceptLicense").checked
+      })
+    });
+  } catch (error) {
+    await refresh().catch(() => {});
+    throw error;
+  }
   await window.t8Desktop?.saveDirectorySetting("modelDirectory", $("modelPath").value.trim());
+  rememberActiveModel(result.model, result.runtime);
   renderModel(result.model);
+  $("quickLaunchFeedback").hidden = true;
+  setActionMessage("launchStatus", "模型已就绪，可点击启动或选择创作模板。", "success");
   $("downloadStatus").textContent = "当前模型已启用；首次生成时按需加载到显存。";
 }
 

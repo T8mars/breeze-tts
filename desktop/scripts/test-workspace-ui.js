@@ -111,6 +111,17 @@ test("first-run model preparation stays on a clean launcher with concise guidanc
   assert.match(css, /\.quick-launch-feedback span\s*\{[^}]*overflow-wrap:\s*anywhere/);
 });
 
+test("successful model activation immediately updates the launch guard", () => {
+  const rememberSource = sourceBetween(renderer, "function rememberActiveModel", "function renderDiagnostics");
+  const activateSource = sourceBetween(renderer, "async function activateCurrentModel", "async function pollDownload");
+  const chooseSource = sourceBetween(renderer, "async function chooseModelDirectory", "async function downloadModel");
+  assert.match(rememberSource, /state\.diagnostics\.model = report/);
+  assert.match(activateSource, /rememberActiveModel\(result\.model, result\.runtime\)/);
+  assert.match(activateSource, /quickLaunchFeedback/);
+  assert.match(chooseSource, /rememberActiveModel\(selectedReport\.model, selectedReport\.runtime\)/);
+  assert.match(chooseSource, /await refresh\(\)\.catch/);
+});
+
 test("inline vocal events are visible in both Chinese and English", () => {
   for (const event of ["[笑]", "[咳嗽]", "[清嗓子]", "[叹气]", "(laugh)", "(cough)", "(clears throat)", "(sigh)"]) {
     assert.ok(html.includes(`<code>${event}</code>`), `missing inline vocal event: ${event}`);
