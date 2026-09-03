@@ -113,6 +113,31 @@ def test_voice_library_and_content_tools(monkeypatch, tmp_path):
         assert client.delete(f"/api/voices/{voice_id}").json()["deleted"] is True
 
 
+def test_voice_library_serves_its_private_reference_for_local_preview(monkeypatch, tmp_path):
+    monkeypatch.setenv("T8_BREEZE_DATA_DIR", str(tmp_path / "data"))
+    reference = tmp_path / "role.wav"
+    sf.write(reference, np.zeros(8_000, dtype=np.float32), 8_000)
+    payload = base64.b64encode(reference.read_bytes()).decode("ascii")
+    with TestClient(create_app(tmp_path / "missing-model"), base_url="http://127.0.0.1") as client:
+        created = client.post(
+            "/api/voices",
+            json={
+                "name": "参考音色",
+                "mode": "clone",
+                "reference_text": "这是一段参考音频。",
+                "reference_filename": "role.wav",
+                "reference_audio_base64": payload,
+            },
+        )
+        assert created.status_code == 200
+        voice_id = created.json()["id"]
+        preview = client.get(f"/api/voices/{voice_id}/reference")
+        assert preview.status_code == 200
+        assert preview.headers["content-type"].startswith("audio/")
+        assert preview.content.startswith(b"RIFF")
+        assert client.get("/api/voices/missing/reference").status_code == 404
+
+
 def test_capabilities_are_explicit(monkeypatch, tmp_path):
     monkeypatch.setenv("T8_BREEZE_DATA_DIR", str(tmp_path / "data"))
     with TestClient(create_app(tmp_path / "missing-model"), base_url="http://127.0.0.1") as client:

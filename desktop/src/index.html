@@ -6,12 +6,12 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' ws://127.0.0.1:*; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'" />
     <title>T8star-Aix · Breeze TTS 2</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=0.2.6" />
+    <link rel="stylesheet" href="styles.css?v=0.2.7" />
   </head>
   <body>
     <main class="app-shell">
       <header class="hero">
-        <div><span class="eyebrow">BREEZE TTS 2 · DESKTOP 0.2.6</span><h1>T8star-Aix · Breeze TTS 2</h1><p id="buildMeta" class="build-meta">正在读取版本信息…</p></div>
+        <div><span class="eyebrow">BREEZE TTS 2 · DESKTOP 0.2.7</span><h1>T8star-Aix · Breeze TTS 2</h1><p id="buildMeta" class="build-meta">正在读取版本信息…</p></div>
         <div class="hero-copy"><p>中英双语 · 自然语言逐句演绎 · 本地生成</p><p class="credit">整合制作：B站 @T8star-Aix</p></div>
       </header>
 
@@ -79,9 +79,26 @@
         </section>
 
         <section id="workspacePageVoices" class="tab-page" role="tabpanel" aria-labelledby="workspaceTabVoices" data-page="voices" hidden>
-          <div class="page-intro"><div><span class="step-label">VOICE LIBRARY 2.0</span><h2>角色音色库</h2></div><p>稳定 ID、搜索收藏、标签备注、试听与安全音色包。</p></div>
+          <div class="page-intro"><div><span class="step-label">VOICE LIBRARY 2.1</span><h2>角色音色库</h2></div><p>参考音频和准确逐字稿会复制到本地音色库，原文件移动后仍可复用。</p></div>
           <div class="voice-library-layout"><aside class="panel voice-browser"><div class="panel-heading"><strong>已保存音色</strong><button id="refreshVoicesButton" class="text-button">刷新</button></div><input id="voiceSearch" aria-label="搜索音色" placeholder="搜索名称、标签或备注" /><label class="checkbox-row small"><input id="favoriteOnly" type="checkbox" /><span>只看收藏</span></label><select id="libraryVoiceSelect" size="12" aria-label="音色列表"></select><div id="voiceEmptyState" class="compact-empty" hidden><strong>还没有可用音色</strong><span>填写右侧信息并点击“新建音色”，以后即可一键复用。</span></div></aside>
-            <section class="panel voice-editor"><div class="form-grid"><div class="field"><label for="voiceName">音色名称</label><input id="voiceName" maxlength="80" placeholder="例如：旁白 · 温柔女声" /></div><div class="field"><label for="voiceLanguage">默认语言</label><select id="voiceLanguage"><option value="auto">自动</option><option value="zh">中文</option><option value="en">English</option></select></div><div class="field full"><label for="voiceTags">标签</label><input id="voiceTags" placeholder="旁白, 温柔, 广告" /></div><div class="field full"><label for="voiceNotes">备注</label><textarea id="voiceNotes" rows="4" placeholder="项目适用范围、授权说明、录音条件…"></textarea></div><div class="field full"><label for="voicePreviewText">固定试听文本</label><textarea id="voicePreviewText" rows="3">你好，这是一段音色库试听。</textarea></div><label class="checkbox-row"><input id="voiceFavorite" type="checkbox" /><span>收藏此音色</span></label></div><div class="row-actions voice-actions"><button id="applyVoiceButton" class="secondary">应用到生成页</button><button id="saveVoiceButton" class="primary">新建音色</button><button id="updateVoiceButton" class="secondary">保存修改</button><button id="deleteVoiceButton" class="danger">删除</button><button id="exportVoiceButton" class="secondary">导出音色包</button><button id="importVoiceButton" class="secondary">导入音色包</button></div><p id="voiceStatus" class="hint">选择一个音色进行编辑或试听。</p></section>
+            <section class="panel voice-editor">
+              <div class="voice-editor-intro"><strong>保存一次，生成与多角色工程直接复用</strong><p>声音克隆和演绎导演必须同时保存参考音频与准确逐字稿；声音设计可只保存自然语言音色描述。</p></div>
+              <div class="form-grid">
+                <div class="field"><label for="voiceName">音色名称</label><input id="voiceName" maxlength="80" placeholder="例如：旁白 · 温柔女声" /></div>
+                <div class="field"><label for="voiceMode">音色类型</label><select id="voiceMode"><option value="clone" selected>声音克隆（参考音频）</option><option value="direction">演绎导演（参考音频 + 指令）</option><option value="design">声音设计（文字描述）</option></select></div>
+                <div class="field"><label for="voiceLanguage">默认语言</label><select id="voiceLanguage"><option value="auto">自动</option><option value="zh">中文</option><option value="en">English</option></select></div>
+                <label class="checkbox-row voice-favorite"><input id="voiceFavorite" type="checkbox" /><span>收藏此音色</span></label>
+                <div class="field full"><label for="voiceInstruction">音色描述／默认演绎指令</label><textarea id="voiceInstruction" rows="3" placeholder="例如：沉稳自然的纪录片旁白；声音克隆可留空"></textarea></div>
+                <section class="voice-reference-panel full" aria-labelledby="voiceReferenceHeading">
+                  <div class="field"><label id="voiceReferenceHeading" for="voiceReferenceAudio">角色音色参考音频</label><input id="voiceReferenceAudio" type="file" accept=".wav,.flac,.ogg,.mp3,audio/wav,audio/flac,audio/ogg,audio/mpeg" /><p id="voiceReferenceStatus" class="hint" role="status" aria-live="polite">上传或拖入 WAV / FLAC / OGG / MP3，最长 60 秒；保存后会复制到私有音色库。</p><audio id="voiceReferencePreview" controls preload="metadata" hidden></audio><button id="voiceClearReferenceButton" type="button" class="text-button" disabled>移除已保存参考（仅声音设计）</button></div>
+                  <div class="field"><label for="voiceReferenceText">参考音频准确逐字稿</label><textarea id="voiceReferenceText" rows="5" placeholder="必须与参考音频逐字一致，停顿和标点尽量准确"></textarea><button id="voiceTranscribeButton" type="button" class="secondary">Whisper 自动填写逐字稿</button><p class="hint">没有安装 Whisper 时仍可手动填写；保存克隆音色前不能为空。</p></div>
+                </section>
+                <div class="field full"><label for="voiceTags">标签</label><input id="voiceTags" placeholder="旁白, 温柔, 广告" /></div>
+                <div class="field full"><label for="voiceNotes">备注</label><textarea id="voiceNotes" rows="3" placeholder="项目适用范围、授权说明、录音条件…"></textarea></div>
+                <div class="field full"><label for="voicePreviewText">应用到生成页时的试听文本</label><textarea id="voicePreviewText" rows="2">你好，这是一段音色库试听。</textarea></div>
+              </div>
+              <div class="row-actions voice-actions"><button id="applyVoiceButton" class="secondary">应用并去生成</button><button id="saveVoiceButton" class="primary">新建音色</button><button id="updateVoiceButton" class="secondary">保存修改</button><button id="deleteVoiceButton" class="danger">删除</button><button id="exportVoiceButton" class="secondary">导出音色包</button><button id="importVoiceButton" class="secondary">导入音色包</button></div><p id="voiceStatus" class="hint">上传参考音频并填写逐字稿，即可新建可复用的克隆音色。</p>
+            </section>
           </div>
         </section>
 
@@ -101,6 +118,6 @@
       <footer>非官方集成 · 请确保拥有参考声音的全部权利与许可 · BreezeBlue 模型仅限研究与非商业用途</footer>
     </main>
     <dialog id="licenseDialog"><form method="dialog"><button class="dialog-close">关闭</button></form><h2>BreezeBlue 模型许可证</h2><pre id="licenseText">正在读取…</pre></dialog>
-    <script src="renderer.js?v=0.2.6"></script>
+    <script src="renderer.js?v=0.2.7"></script>
   </body>
 </html>

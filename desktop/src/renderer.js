@@ -8,6 +8,8 @@ const state = {
   audioContext: null,
   outputDirectory: null,
   referencePreviewUrl: null,
+  voiceReferencePreviewUrl: null,
+  voiceClearReference: false,
   generating: false,
   downloading: false,
   referenceDuration: null,
@@ -68,7 +70,7 @@ const GENERATION_CONFLICT_IDS = [
   "unloadButton",
   "chooseOutputButton"
 ];
-const VOICE_CONTROL_IDS = ["voiceSelect", "libraryVoiceSelect", "voiceName", "applyVoiceButton", "saveVoiceButton", "updateVoiceButton", "deleteVoiceButton", "refreshVoicesButton", "exportVoiceButton", "importVoiceButton"];
+const VOICE_CONTROL_IDS = ["voiceSelect", "libraryVoiceSelect", "voiceName", "voiceMode", "voiceLanguage", "voiceInstruction", "voiceReferenceAudio", "voiceReferenceText", "voiceTags", "voiceNotes", "voicePreviewText", "voiceFavorite", "applyVoiceButton", "saveVoiceButton", "updateVoiceButton", "deleteVoiceButton", "refreshVoicesButton", "exportVoiceButton", "importVoiceButton"];
 const BATCH_CONTROL_IDS = ["batchKind", "batchInput", "analyzeRolesButton"];
 const CREATION_TEMPLATES = {
   blank: { tab: "generate", mode: "design" },
@@ -376,6 +378,9 @@ function updateControlState() {
   $("timelineTrack")?.setAttribute("aria-disabled", String(state.batching));
   $("timelineTrack")?.classList.toggle("busy", state.batching);
   $("transcribeButton").disabled = generationBusy || state.transcribing || !state.capabilities.whisper;
+  $("voiceTranscribeButton").disabled = generationBusy || state.transcribing || !state.capabilities.whisper || !$("voiceReferenceAudio").files[0];
+  const selectedEditorVoice = state.voices.find((voice) => voice.id === $("libraryVoiceSelect")?.value);
+  $("voiceClearReferenceButton").disabled = generationBusy || $("voiceMode").value !== "design" || !selectedEditorVoice?.has_reference || state.voiceClearReference;
   $("installWhisperButton").disabled = generationBusy || state.installingWhisper || state.whisperInstallComplete;
   $("checkUpdateButton").disabled = !state.updaterStatus.configured || ["checking", "downloading"].includes(state.updaterStatus.state);
   $("installUpdateButton").disabled = state.updaterStatus.state !== "downloaded";
@@ -940,6 +945,73 @@ function applySelectedVoice() {
   $("voiceStatus").textContent = `正在使用：${voiceLabel(voice)}。修改模式或参考配置会切回手动配置。`;
 }
 
+function clearVoiceReferencePreview() {
+  if (state.voiceReferencePreviewUrl) URL.revokeObjectURL(state.voiceReferencePreviewUrl);
+  state.voiceReferencePreviewUrl = null;
+  const preview = $("voiceReferencePreview");
+  preview.pause();
+  preview.removeAttribute("src");
+  preview.load();
+  preview.hidden = true;
+}
+
+function renderVoiceReferenceEditor(voice = null) {
+  clearVoiceReferencePreview();
+  $("voiceReferenceAudio").value = "";
+  state.voiceClearReference = false;
+  if (voice?.has_reference) {
+    $("voiceReferencePreview").src = `/api/voices/${encodeURIComponent(voice.id)}/reference?v=${encodeURIComponent(voice.updated_at || "")}`;
+    $("voiceReferencePreview").hidden = false;
+    $("voiceReferenceStatus").textContent = "已载入音色库中的参考音频，可直接试听；重新上传会在保存时替换。";
+  } else {
+    $("voiceReferenceStatus").textContent = $("voiceMode").value === "design"
+      ? "声音设计可不上传；上传后也会随音色一起保存。"
+      : `请上传 WAV / FLAC / OGG / MP3（最长 ${MAX_REFERENCE_SECONDS} 秒），并填写准确逐字稿。`;
+  }
+  updateControlState();
+}
+
+async function previewVoiceReferenceFile() {
+  const file = $("voiceReferenceAudio").files[0];
+  if (!file) {
+    const selected = state.voices.find((voice) => voice.id === $("libraryVoiceSelect").value);
+    renderVoiceReferenceEditor(selected || null);
+    return;
+  }
+  const duration = await inspectReferenceAudio(file);
+  clearVoiceReferencePreview();
+  state.voiceReferencePreviewUrl = URL.createObjectURL(file);
+  $("voiceReferencePreview").src = state.voiceReferencePreviewUrl;
+  $("voiceReferencePreview").hidden = false;
+  state.voiceClearReference = false;
+  $("voiceReferenceStatus").textContent = `待保存的新参考音频：${file.name} · ${duration.toFixed(1)} 秒。`;
+  updateControlState();
+}
+
+function updateVoiceModeEditor() {
+  const mode = $("voiceMode").value;
+  const selected = state.voices.find((voice) => voice.id === $("libraryVoiceSelect").value);
+  const hasPendingFile = Boolean($("voiceReferenceAudio").files[0]);
+  if (!hasPendingFile && !(selected?.has_reference && !state.voiceClearReference)) {
+    $("voiceReferenceStatus").textContent = mode === "design"
+      ? "声音设计可只保存文字描述，也可以附带参考音频。"
+      : "声音克隆／演绎导演必须上传参考音频并填写准确逐字稿。";
+  }
+  updateControlState();
+}
+
+function markVoiceReferenceForRemoval() {
+  if ($("voiceMode").value !== "design") {
+    $("voiceReferenceStatus").textContent = "克隆和导演音色必须保留参考音频；可先改为声音设计，或上传新音频替换。";
+    return;
+  }
+  state.voiceClearReference = true;
+  $("voiceReferenceAudio").value = "";
+  clearVoiceReferencePreview();
+  $("voiceReferenceStatus").textContent = "已标记移除；点击“保存修改”后才会真正删除库内参考音频。";
+  updateControlState();
+}
+
 function selectLibraryVoice() {
   const voice = state.voices.find((item) => item.id === $("libraryVoiceSelect").value);
   if (!voice) {
@@ -954,13 +1026,30 @@ function selectLibraryVoice() {
   $("instruction").value = voice.instruction || "";
   $("referenceText").value = voice.reference_text || "";
   $("voiceName").value = voice.name || "";
+  $("voiceMode").value = voice.mode || "design";
   $("voiceLanguage").value = voice.language || "auto";
+  $("voiceInstruction").value = voice.instruction || "";
+  $("voiceReferenceText").value = voice.reference_text || "";
   $("voiceTags").value = (voice.tags || []).join(", ");
   $("voiceNotes").value = voice.notes || "";
   $("voicePreviewText").value = voice.preview_text || "你好，这是一段音色库试听。";
   $("voiceFavorite").checked = Boolean(voice.favorite);
+  renderVoiceReferenceEditor(voice);
   $("voiceStatus").textContent = `${voiceLabel(voice)} · ${voice.language || "auto"}${voice.favorite ? " · 已收藏" : ""}`;
   updateControlState();
+}
+
+function applyLibraryVoiceToGeneration() {
+  const voice = state.voices.find((item) => item.id === $("libraryVoiceSelect").value);
+  if (!voice) {
+    $("voiceStatus").textContent = "请先选择一个已保存音色。";
+    return;
+  }
+  $("voiceSelect").value = voice.id;
+  applySelectedVoice();
+  if (voice.preview_text) $("targetText").value = voice.preview_text;
+  showWorkspaceTab("generate");
+  $("generationStatus").textContent = `已应用音色“${voice.name}”，可以直接生成。`;
 }
 
 function voiceMetadata() {
@@ -976,9 +1065,10 @@ function voiceMetadata() {
 async function saveCurrentVoice() {
   const name = $("voiceName").value.trim();
   if (!name) throw new Error("请先输入音色名称。");
-  const reference = $("referenceAudio").files[0];
-  const referenceText = $("referenceText").value.trim();
-  if (["clone", "direction"].includes(state.mode) && (!reference || !referenceText)) {
+  const mode = $("voiceMode").value;
+  const reference = $("voiceReferenceAudio").files[0];
+  const referenceText = $("voiceReferenceText").value.trim();
+  if (["clone", "direction"].includes(mode) && (!reference || !referenceText)) {
     throw new Error("保存 Clone/Direction 音色必须选择参考音频并填写准确逐字稿。");
   }
   if (reference) await inspectReferenceAudio(reference);
@@ -986,8 +1076,8 @@ async function saveCurrentVoice() {
     method: "POST",
     body: JSON.stringify({
       name,
-      mode: state.mode,
-      instruction: $("instruction").value.trim(),
+      mode,
+      instruction: $("voiceInstruction").value.trim(),
       reference_text: referenceText,
       reference_filename: reference?.name || "reference.wav",
       reference_audio_base64: await fileToBase64(reference),
@@ -997,23 +1087,34 @@ async function saveCurrentVoice() {
   await refreshVoices();
   state.selectedVoiceId = created.id;
   renderVoices(state.voices);
-  $("voiceName").value = "";
+  $("libraryVoiceSelect").value = created.id;
+  selectLibraryVoice();
   $("voiceStatus").textContent = `已保存音色“${created.name}”。`;
 }
 
 async function updateSelectedVoice() {
   const voice = state.voices.find((item) => item.id === $("libraryVoiceSelect").value);
   if (!voice) throw new Error("请先选择要修改的音色。");
-  const reference = $("referenceAudio").files[0];
+  const name = $("voiceName").value.trim();
+  if (!name) throw new Error("音色名称不能为空。");
+  const mode = $("voiceMode").value;
+  const reference = $("voiceReferenceAudio").files[0];
+  const referenceText = $("voiceReferenceText").value.trim();
+  const willHaveReference = Boolean(reference) || (voice.has_reference && !state.voiceClearReference);
+  if (["clone", "direction"].includes(mode) && (!willHaveReference || !referenceText)) {
+    throw new Error("Clone/Direction 音色必须保留参考音频并填写准确逐字稿。");
+  }
   if (reference) await inspectReferenceAudio(reference);
   const updated = await api(`/api/voices/${encodeURIComponent(voice.id)}`, {
     method: "PATCH",
     body: JSON.stringify({
-      name: $("voiceName").value.trim(),
-      instruction: $("instruction").value.trim(),
-      reference_text: $("referenceText").value.trim(),
+      name,
+      mode,
+      instruction: $("voiceInstruction").value.trim(),
+      reference_text: referenceText,
       reference_filename: reference?.name || "reference.wav",
       reference_audio_base64: await fileToBase64(reference),
+      clear_reference: state.voiceClearReference,
       ...voiceMetadata()
     })
   });
@@ -1471,6 +1572,34 @@ async function remixCompletedDialogueProject(project) {
   } finally {
     state.remixing = false;
     state.batching = false;
+    updateControlState();
+  }
+}
+
+async function transcribeVoiceReference() {
+  if (!state.capabilities.whisper) {
+    throw new Error("未安装 faster-whisper；可先手动填写逐字稿，或在生成页安装 Whisper 组件后重启。");
+  }
+  const reference = $("voiceReferenceAudio").files[0];
+  if (!reference) throw new Error("请先在音色库上传新的参考音频。");
+  await inspectReferenceAudio(reference);
+  state.transcribing = true;
+  updateControlState();
+  $("voiceReferenceStatus").textContent = "正在识别参考音频，首次使用可能需要下载 Whisper 模型…";
+  try {
+    const result = await api("/api/tools/transcribe", {
+      method: "POST",
+      body: JSON.stringify({
+        reference_filename: reference.name,
+        reference_audio_base64: await fileToBase64(reference),
+        model_size: $("whisperModel").value,
+        language: $("voiceLanguage").value === "auto" ? null : $("voiceLanguage").value
+      })
+    });
+    $("voiceReferenceText").value = (result.segments || []).map((item) => item.text).join(" ").trim();
+    $("voiceReferenceStatus").textContent = `逐字稿已填写 · ${result.language || "自动识别"} · ${result.segments?.length || 0} 段；请核对后保存。`;
+  } finally {
+    state.transcribing = false;
     updateControlState();
   }
 }
@@ -2275,11 +2404,19 @@ $("voiceSelect").addEventListener("change", applySelectedVoice);
 $('libraryVoiceSelect').addEventListener('change', selectLibraryVoice);
 $('voiceSearch').addEventListener('input', renderLibraryVoices);
 $('favoriteOnly').addEventListener('change', renderLibraryVoices);
+$("voiceMode").addEventListener("change", updateVoiceModeEditor);
+$("voiceReferenceAudio").addEventListener("change", () => previewVoiceReferenceFile().catch((error) => {
+  clearVoiceReferencePreview();
+  $("voiceReferenceStatus").textContent = error.message;
+  updateControlState();
+}));
+$("voiceClearReferenceButton").addEventListener("click", markVoiceReferenceForRemoval);
+$("voiceTranscribeButton").addEventListener("click", () => transcribeVoiceReference().catch((error) => { $("voiceReferenceStatus").textContent = error.message; }));
 $("historySearch").addEventListener("input", () => { state.historyPage = 1; renderHistory(); });
 $("historyKind").addEventListener("change", () => { state.historyPage = 1; renderHistory(); });
 $("historyPrevious").addEventListener("click", () => { state.historyPage -= 1; renderHistory(); });
 $("historyNext").addEventListener("click", () => { state.historyPage += 1; renderHistory(); });
-$("applyVoiceButton").addEventListener("click", applySelectedVoice);
+$("applyVoiceButton").addEventListener("click", applyLibraryVoiceToGeneration);
 $("saveVoiceButton").addEventListener("click", () => saveCurrentVoice().catch((error) => { $("voiceStatus").textContent = error.message; }));
 $('updateVoiceButton').addEventListener('click', () => updateSelectedVoice().catch((error) => { $("voiceStatus").textContent = error.message; }));
 $('exportVoiceButton').addEventListener('click', () => exportSelectedVoice().catch((error) => { $("voiceStatus").textContent = error.message; }));

@@ -167,6 +167,21 @@ test("launch, voice library, history and diagnostics expose actionable states", 
   assert.match(html, /id="copyDiagnosticsButton"/);
 });
 
+test("voice library owns its reference-audio upload, transcript and playback flow", () => {
+  for (const id of ["voiceMode", "voiceInstruction", "voiceReferenceAudio", "voiceReferenceText", "voiceReferencePreview", "voiceTranscribeButton", "voiceClearReferenceButton"]) {
+    assert.ok(html.includes(`id="${id}"`), `missing voice-library control: ${id}`);
+  }
+  const selectSource = sourceBetween(renderer, "function selectLibraryVoice", "function applyLibraryVoiceToGeneration");
+  const createSource = sourceBetween(renderer, "async function saveCurrentVoice", "async function updateSelectedVoice");
+  const updateSource = sourceBetween(renderer, "async function updateSelectedVoice", "async function exportSelectedVoice");
+  assert.match(renderer, /\/api\/voices\/\$\{encodeURIComponent\(voice\.id\)\}\/reference/);
+  assert.match(selectSource, /renderVoiceReferenceEditor\(voice\)/);
+  assert.match(createSource, /\$\("voiceReferenceAudio"\)\.files\[0\]/);
+  assert.match(createSource, /\$\("voiceReferenceText"\)\.value\.trim\(\)/);
+  assert.match(updateSource, /clear_reference: state\.voiceClearReference/);
+  assert.match(css, /\.voice-reference-panel\s*\{[^}]*grid-template-columns/);
+});
+
 test("timeline controls have per-line accessible names and touch-sized handles", () => {
   assert.match(renderer, /第 \$\{line\.order\} 句音色/);
   assert.match(renderer, /第 \$\{line\.order\} 句语言/);

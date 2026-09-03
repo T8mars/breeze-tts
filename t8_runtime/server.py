@@ -718,6 +718,16 @@ def create_app(model_dir: Path | None = None) -> FastAPI:
             if reference_path is not None:
                 reference_path.unlink(missing_ok=True)
 
+    @app.get("/api/voices/{voice_id}/reference")
+    def voice_reference(voice_id: str):
+        voice = get_voice(voice_id, include_private=True)
+        if voice is None:
+            raise HTTPException(status_code=404, detail="音色不存在。")
+        reference = private_reference_path(voice)
+        if reference is None:
+            raise HTTPException(status_code=404, detail="该音色没有保存参考音频。")
+        return FileResponse(reference)
+
     @app.post("/api/voices/{voice_id}/export")
     def voice_export(voice_id: str) -> dict[str, str]:
         target = user_data_dir() / "exports" / f"{voice_id}.t8voice.zip"
