@@ -71,7 +71,7 @@ const GENERATION_CONFLICT_IDS = [
   "chooseOutputButton"
 ];
 const VOICE_CONTROL_IDS = ["voiceSelect", "libraryVoiceSelect", "voiceName", "voiceMode", "voiceLanguage", "voiceInstruction", "voiceReferenceAudio", "voiceReferenceText", "voiceTags", "voiceNotes", "voicePreviewText", "voiceFavorite", "newVoiceButton", "applyVoiceButton", "saveVoiceButton", "updateVoiceButton", "deleteVoiceButton", "refreshVoicesButton", "exportVoiceButton", "importVoiceButton"];
-const BATCH_CONTROL_IDS = ["batchKind", "batchInput", "analyzeRolesButton", "loadBatchExampleButton", "clearBatchInputButton"];
+const BATCH_CONTROL_IDS = ["batchKind", "batchInput", "defaultRole", "defaultRolePreset", "analyzeRolesButton", "loadBatchExampleButton", "clearBatchInputButton"];
 const CREATION_TEMPLATES = {
   blank: { tab: "generate", mode: "design" },
   narration: {
@@ -501,6 +501,17 @@ function voiceOption(voice, selectedValue = "") {
   return option;
 }
 
+function renderDefaultRolePresets() {
+  const preset = $("defaultRolePreset");
+  const previous = preset.value;
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = state.voices.length ? "从音色库选择…" : "音色库暂无音色";
+  preset.replaceChildren(placeholder, ...state.voices.map((voice) => voiceOption(voice, previous)));
+  const matched = state.voices.find((voice) => normalizeRoleName(voice.name) === normalizeRoleName($("defaultRole").value));
+  preset.value = state.voices.some((voice) => voice.id === previous) ? previous : (matched?.id || "");
+}
+
 function renderVoices(voices) {
   state.voices = Array.isArray(voices) ? voices : [];
   if (!state.voices.some((voice) => voice.id === state.selectedVoiceId)) state.selectedVoiceId = "";
@@ -509,6 +520,7 @@ function renderVoices(voices) {
   manual.textContent = "手动配置（不使用音色库）";
   manual.selected = !state.selectedVoiceId;
   $("voiceSelect").replaceChildren(manual, ...state.voices.map((voice) => voiceOption(voice, state.selectedVoiceId)));
+  renderDefaultRolePresets();
   renderLibraryVoices();
   if (state.batchRoles.length) renderRoleMappings(state.batchRoles);
 }
@@ -1301,6 +1313,21 @@ function updateBatchKind() {
   $("batchInputHint").textContent = content[2];
   $("roleMappingPanel").hidden = !shouldShowRoleMappings();
   updateControlState();
+}
+
+function applyDefaultRolePreset() {
+  const voice = state.voices.find((item) => item.id === $("defaultRolePreset").value);
+  if (!voice) return;
+  $("defaultRole").value = voice.name;
+  if (["zh", "en"].includes(voice.language)) $("defaultLanguage").value = voice.language;
+  updateDetectedRoles();
+  setActionMessage("batchStatus", `默认角色已选“${voice.name}”；解析时会自动绑定这个音色。`, "success");
+}
+
+function matchDefaultRolePreset() {
+  const role = normalizeRoleName($("defaultRole").value);
+  const voice = state.voices.find((item) => normalizeRoleName(item.name) === role);
+  $("defaultRolePreset").value = voice?.id || "";
 }
 
 function loadBatchExample() {
@@ -2522,6 +2549,8 @@ $("transcribeButton").addEventListener("click", () => transcribeReference().catc
 $("installWhisperButton").addEventListener("click", () => installWhisperComponent().catch((error) => { $("whisperStatus").textContent = error.message; }));
 $("batchKind").addEventListener("change", updateBatchKind);
 $("batchInput").addEventListener("input", updateDetectedRoles);
+$("defaultRolePreset").addEventListener("change", applyDefaultRolePreset);
+$("defaultRole").addEventListener("input", matchDefaultRolePreset);
 $("loadBatchExampleButton").addEventListener("click", loadBatchExample);
 $("clearBatchInputButton").addEventListener("click", clearBatchInput);
 $("roleMappingPanel").addEventListener("change", (event) => {

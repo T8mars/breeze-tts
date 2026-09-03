@@ -199,6 +199,7 @@ pre { max-height: 230px; overflow: auto; white-space: pre-wrap; word-break: brea
 .step-strip { display: flex; align-items: center; gap: 16px; margin: -2px 0 14px; color: var(--text); }
 .step-strip span { color: var(--blue-text); }
 .defaults-bar { display: grid; grid-template-columns: minmax(240px, 0.9fr) minmax(180px, 1fr) minmax(180px, 1fr); gap: 12px; align-items: end; margin-bottom: 14px; }
+.default-role-picker { display: grid; grid-template-columns: minmax(110px, 0.75fr) minmax(170px, 1.25fr); gap: 8px; }
 .upload-button { display: grid; place-items: center; min-height: 62px; margin: 0; border: 1px dashed #ffb6ce; border-radius: 10px; color: var(--brand-text); background: var(--brand-soft); cursor: pointer; }
 .import-toolbar { display: grid; grid-template-columns: 230px 190px minmax(220px, 1fr) 170px; gap: 12px; align-items: end; margin-bottom: 14px; }
 .timeline-toolbar { margin-bottom: 14px; }
@@ -296,7 +297,7 @@ dialog::backdrop { background: rgba(15, 23, 42, 0.35); }
   .app-shell { width: calc(100% - 24px); padding-top: 18px; }
   .hero, .section-title-row, .page-intro, .generation-topline, .timeline-toolbar, .batch-input-heading { align-items: stretch; flex-direction: column; }
   .hero-copy { text-align: left; }
-  .launcher-grid, .form-grid, .reference-panel, .voice-reference-panel, .import-toolbar, .defaults-bar { grid-template-columns: 1fr; }
+  .launcher-grid, .form-grid, .reference-panel, .voice-reference-panel, .import-toolbar, .defaults-bar, .default-role-picker { grid-template-columns: 1fr; }
   .launcher-advanced > summary { align-items: flex-start; flex-direction: column; gap: 3px; }
   .studio-toolbar { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) auto; top: 0; gap: 8px; overflow: visible; padding: 8px; }
   .studio-toolbar > button { min-width: 0; min-height: 40px; padding-inline: 9px; white-space: normal; }

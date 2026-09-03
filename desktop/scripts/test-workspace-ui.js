@@ -198,6 +198,14 @@ test("batch editor ships runnable examples and does not mistake vocal events for
   assert.match(renderer, /if \(bracket\) return !INLINE_VOCAL_EVENT_ROLES\.has/);
 });
 
+test("batch default role can be selected from the saved voice library", () => {
+  assert.match(html, /id="defaultRolePreset"[^>]*aria-label="从已保存音色选择默认角色"/);
+  assert.match(renderer, /function renderDefaultRolePresets/);
+  assert.match(renderer, /function applyDefaultRolePreset/);
+  assert.match(renderer, /解析时会自动绑定这个音色/);
+  assert.match(renderer, /defaultRolePreset"\)\.addEventListener\("change"/);
+});
+
 test("Whisper small is a bundled default and repair handles the managed runtime", () => {
   assert.match(html, /Whisper small（整合包内置）/);
   assert.match(renderer, /whisper_small_bundled/);
