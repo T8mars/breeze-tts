@@ -196,6 +196,7 @@ test("batch editor ships runnable examples and does not mistake vocal events for
   assert.match(renderer, /function clearBatchInput/);
   assert.match(renderer, /INLINE_VOCAL_EVENT_ROLES/);
   assert.match(renderer, /if \(bracket\) return !INLINE_VOCAL_EVENT_ROLES\.has/);
+  assert.match(renderer, /BATCH_EXAMPLES\[template\.batchKind\]/);
 });
 
 test("batch default role can be selected from the saved voice library", () => {

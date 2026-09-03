@@ -1730,8 +1730,13 @@ function applyCreationTemplate(templateId) {
     if (!state.dialogueProject) restoreProjectDraft();
     setActionMessage("batchStatus", state.dialogueProject?.lines?.length ? `已恢复“${state.dialogueProject.name || "未命名工程"}”，可从上次位置继续。` : "没有可恢复的自动草稿。");
   } else if (template.tab === "dialogue") {
+    const currentBatchText = $("batchInput").value;
     $("batchKind").value = template.batchKind;
+    if (!currentBatchText.trim() || Object.values(BATCH_EXAMPLES).includes(currentBatchText)) {
+      $("batchInput").value = BATCH_EXAMPLES[template.batchKind] || BATCH_EXAMPLES.items;
+    }
     updateBatchKind();
+    updateDetectedRoles();
     setActionMessage("batchStatus", template.batchKind === "srt" ? "请导入或粘贴 SRT，解析后即可编辑时间轴。" : "请粘贴“角色：台词”脚本，解析后映射音色。", "success");
   } else if (templateId !== "blank") {
     clearDirectionRecipe({ preserveInstruction: true });
