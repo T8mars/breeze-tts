@@ -73,8 +73,8 @@ def _write_voice_bundle(path: Path, *, payload: bytes | None = None, digest: str
 def test_comfy_package_registers_eight_nodes():
     package_dir = ROOT / "comfyui-breeze-tts-T8"
     module = _load_package("comfyui_breeze_tts_T8_test")
-    assert module.__version__ == "0.2.5"
-    assert 'version = "0.2.5"' in (package_dir / "pyproject.toml").read_text(encoding="utf-8")
+    assert module.__version__ == "0.2.6"
+    assert 'version = "0.2.6"' in (package_dir / "pyproject.toml").read_text(encoding="utf-8")
     assert len(module.NODE_CLASS_MAPPINGS) == 8
     assert set(module.NODE_CLASS_MAPPINGS) == {
         "T8_BreezeTTS_ModelLoader",
@@ -173,6 +173,7 @@ def test_comfy_ships_frontend_loadable_workflows():
     }
 
     builtin_types = {"LoadAudio", "PreviewAudio", "SaveAudio"}
+    canonical_events = ("[笑]", "[咳嗽]", "[清嗓子]", "[叹气]", "(laugh)", "(cough)", "(clears throat)", "(sigh)")
     for filename, workflow in workflows.items():
         assert workflow["version"] == 0.4
         assert workflow["extra"]["t8_example_kind"] == "ui_workflow"
@@ -187,6 +188,8 @@ def test_comfy_ships_frontend_loadable_workflows():
         node_types = {node["type"] for node in nodes.values()}
         assert node_types <= set(module.NODE_CLASS_MAPPINGS) | builtin_types
         assert {"T8_BreezeTTS_ModelLoader", "T8_BreezeTTS_Generate", "PreviewAudio", "SaveAudio"} <= node_types
+        group_titles = " ".join(group["title"] for group in workflow["groups"])
+        assert all(event in group_titles for event in canonical_events)
 
         loader_node = next(node for node in nodes.values() if node["type"] == "T8_BreezeTTS_ModelLoader")
         assert loader_node["widgets_values"][-1] is False
@@ -220,6 +223,31 @@ def test_comfy_ships_frontend_loadable_workflows():
 
 
 @pytest.mark.comfy
+def test_inline_vocal_events_are_documented_and_preserved_by_request_nodes():
+    module = _load_package("comfyui_breeze_tts_T8_inline_events")
+    nodes = sys.modules[f"{module.__name__}.nodes"]
+    text = "[清嗓子] 现在开始。(laugh) That was unexpected."
+    audio = {"waveform": torch.zeros(1, 1, 24), "sample_rate": 24_000}
+
+    design, = nodes.BreezeT8DesignRequest().build(text, "温和清晰。", 4.0)
+    clone, = nodes.BreezeT8CloneRequest().build(text, audio, "准确逐字稿。")
+    direction, = nodes.BreezeT8DirectionRequest().build(
+        text, audio, "准确逐字稿。", "先严肃，随后轻笑。", 4.0
+    )
+    assert design["text"] == clone["text"] == direction["text"] == text
+
+    for request_node in (
+        nodes.BreezeT8DesignRequest,
+        nodes.BreezeT8CloneRequest,
+        nodes.BreezeT8DirectionRequest,
+        nodes.BreezeT8VoiceBundleRequest,
+    ):
+        tooltip = request_node.INPUT_TYPES()["required"]["text"][1]["tooltip"]
+        assert "[清嗓子]" in tooltip
+        assert "(clears throat)" in tooltip
+
+
+@pytest.mark.comfy
 def test_comfy_oom_releases_serial_lock(monkeypatch):
     module = _load_package("comfyui_breeze_tts_T8_oom")
     nodes = sys.modules[f"{module.__name__}.nodes"]
@@ -245,12 +273,13 @@ def test_desktop_voice_bundle_builds_standard_audio_and_line_override(tmp_path):
     _write_voice_bundle(bundle, payload=_wav_bytes())
 
     request, audio, info = nodes.BreezeT8VoiceBundleRequest().build(
-        str(bundle), "新的台词。", "inherit", "", 0.0
+        str(bundle), "[咳嗽] 新的台词。", "inherit", "", 0.0
     )
     assert request["mode"] == "clone"
     assert request["reference_audio"] is audio
     assert request["reference_text"] == "这是一段准确的参考文本。"
     assert request["voice_id"] == "voice-test"
+    assert request["text"] == "[咳嗽] 新的台词。"
     assert audio["sample_rate"] == 8_000
     assert audio["waveform"].shape == (1, 1, 800)
     assert audio["waveform"].dtype == torch.float32

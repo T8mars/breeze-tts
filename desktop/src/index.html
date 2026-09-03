@@ -6,12 +6,12 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' ws://127.0.0.1:*; font-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'" />
     <title>T8star-Aix · Breeze TTS 2</title>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="styles.css?v=0.2.5" />
+    <link rel="stylesheet" href="styles.css?v=0.2.6" />
   </head>
   <body>
     <main class="app-shell">
       <header class="hero">
-        <div><span class="eyebrow">BREEZE TTS 2 · DESKTOP 0.2.5</span><h1>T8star-Aix · Breeze TTS 2</h1><p id="buildMeta" class="build-meta">正在读取版本信息…</p></div>
+        <div><span class="eyebrow">BREEZE TTS 2 · DESKTOP 0.2.6</span><h1>T8star-Aix · Breeze TTS 2</h1><p id="buildMeta" class="build-meta">正在读取版本信息…</p></div>
         <div class="hero-copy"><p>中英双语 · 自然语言逐句演绎 · 本地生成</p><p class="credit">整合制作：B站 @T8star-Aix</p></div>
       </header>
 
@@ -27,9 +27,9 @@
             <button type="button" class="template-card" data-template="subtitle"><strong>SRT 配音</strong><span>导入字幕并编辑时间轴</span></button>
             <button id="continueDraftTemplate" type="button" class="template-card template-continue" data-template="continue" disabled><strong>继续上次工程</strong><span>暂无可恢复的自动草稿</span></button>
           </div>
-          <div id="quickLaunchFeedback" class="quick-launch-feedback" role="status" aria-live="polite" hidden><progress id="quickLaunchProgress" max="100"></progress><div><strong>正在启动工作台</strong><span id="quickLaunchStatus">正在校验模型与许可证…</span><span id="quickLaunchElapsed">已等待 0 秒</span></div></div>
+          <div id="quickLaunchFeedback" class="quick-launch-feedback" role="status" aria-live="polite" hidden><progress id="quickLaunchProgress" max="100"></progress><div><strong id="quickLaunchHeading">正在启动工作台</strong><span id="quickLaunchStatus">正在校验模型与许可证…</span><span id="quickLaunchElapsed">已等待 0 秒</span></div></div>
         </section>
-        <details id="advancedLauncher" class="launcher-advanced" open><summary><strong>高级启动设置</strong><span id="advancedLauncherSummary">模型、输出、许可证与运行方式</span></summary>
+        <details id="advancedLauncher" class="launcher-advanced"><summary><strong>高级启动设置</strong><span id="advancedLauncherSummary">模型、输出、许可证与运行方式</span></summary>
         <div class="launcher-grid">
           <section class="panel setup-panel">
             <div class="panel-heading"><div><span class="panel-kicker">01</span><strong>模型与输出</strong></div><button id="refreshButton" class="text-button">刷新</button></div>
@@ -73,7 +73,7 @@
               <div id="referenceField" class="reference-panel full" hidden><div class="field"><label for="referenceAudio">参考音频</label><input id="referenceAudio" type="file" accept=".wav,.flac,.ogg,.mp3,audio/wav,audio/flac,audio/ogg,audio/mpeg" /><p id="referenceAudioStatus" class="hint">支持 WAV / FLAC / OGG / MP3，最长 60 秒。</p><audio id="referencePreview" controls hidden></audio></div><div class="field"><label for="referenceText">参考音频准确逐字稿</label><textarea id="referenceText" rows="3" placeholder="必须与参考音频逐字一致"></textarea><div class="whisper-row"><select id="whisperModel"><option value="tiny">Whisper tiny</option><option value="base">Whisper base</option><option value="small" selected>Whisper small</option><option value="medium">Whisper medium</option><option value="large-v3">Whisper large-v3</option></select><input id="whisperLanguage" maxlength="12" placeholder="zh / en / 自动" /><button id="transcribeButton" class="secondary">Whisper 转写</button></div><p id="whisperStatus" class="hint">正在检查可选 Whisper 组件…</p><button id="installWhisperButton" class="text-button" hidden>安装 Whisper 组件</button></div></div>
               <div class="field"><label for="cfgScale">指令遵循强度（CFG）</label><input id="cfgScale" type="number" min="0.1" max="10" step="0.1" value="4" /></div><div class="field"><label for="seed">Seed</label><input id="seed" type="number" min="0" max="2147483647" value="42" /></div>
             </div>
-            <div class="event-tip">支持声学事件：<code>[笑]</code> <code>[咳嗽]</code> <code>[叹气]</code> · <code>(laugh)</code> <code>(cough)</code> <code>(sigh)</code></div>
+            <div class="event-tip">支持行内声音事件：<code>[笑]</code> <code>[咳嗽]</code> <code>[清嗓子]</code> <code>[叹气]</code> · <code>(laugh)</code> <code>(cough)</code> <code>(clears throat)</code> <code>(sigh)</code></div>
             <section class="output-panel"><div class="panel-heading compact"><strong>流式试听与最终结果</strong><span id="generationStatus">等待生成</span></div><audio id="outputAudio" controls></audio><div class="row-actions"><a id="downloadOutput" class="button-link" hidden download>下载 WAV</a><button id="openOutputButton" class="text-button" hidden>打开输出目录</button></div><pre id="generationMeta">尚无生成记录。</pre></section>
           </section><div class="action-dock"><button id="generateButton" class="primary">生成语音</button><button id="cancelGenerateButton" class="danger" disabled>停止当前生成</button><button id="unloadButton" class="secondary">释放模型显存</button></div>
         </section>
@@ -96,11 +96,11 @@
         <section id="workspacePageHistory" class="tab-page" role="tabpanel" aria-labelledby="workspaceTabHistory" data-page="history" hidden><div class="page-intro"><div><span class="step-label">可追溯输出</span><h2>生成历史</h2></div><button id="refreshHistoryButton" class="secondary">刷新历史</button></div><div class="history-toolbar panel"><div class="field"><label for="historySearch">搜索文本或文件名</label><input id="historySearch" type="search" placeholder="输入关键词" /></div><div class="field"><label for="historyKind">任务类型</label><select id="historyKind"><option value="all">全部</option><option value="single">单句生成</option><option value="batch">批量 / 多角色</option></select></div><p id="historySummary" class="hint" role="status">正在读取历史…</p></div><div id="historyList" class="record-list" aria-live="polite"><p class="empty-state">正在读取历史…</p></div><div id="historyPagination" class="pagination" hidden><button id="historyPrevious" class="secondary">上一页</button><span id="historyPageStatus">第 1 页</span><button id="historyNext" class="secondary">下一页</button></div></section>
         <section id="workspacePageQueue" class="tab-page" role="tabpanel" aria-labelledby="workspaceTabQueue" data-page="queue" hidden><div class="page-intro"><div><span class="step-label">断点与恢复</span><h2>任务队列</h2></div><button id="refreshQueueButton" class="secondary">刷新队列</button></div><div id="queueList" class="record-list" aria-live="polite"><p class="empty-state">正在读取队列…</p></div></section>
         <section id="workspacePageSettings" class="tab-page" role="tabpanel" aria-labelledby="workspaceTabSettings" data-page="settings" hidden><div class="page-intro"><div><span class="step-label">兼容与诊断</span><h2>设置与诊断</h2></div><div class="row-actions"><button id="settingsRefreshDiagnosticsButton" class="secondary">刷新诊断</button><button id="copyDiagnosticsButton" class="secondary">复制诊断摘要</button></div></div><div class="settings-grid"><section class="panel settings-diagnostics"><strong>当前运行环境</strong><div id="settingsDiagnosticsGrid" class="diagnostics-grid settings-diagnostics-grid"><div class="diagnostic pending">检测中…</div></div><p id="settingsDiagnosticStatus" class="hint" role="status">诊断信息会自动脱敏。</p></section><section class="panel"><strong>兼容策略</strong><p>兼容 Transformers 4.57.x 与 5.x；独立环境不会覆盖 ComfyUI 的 Torch、Transformers、Tokenizers 或 NumPy。</p></section><section class="panel"><strong>能力边界</strong><p>Breeze 逐句控制使用自然语言 instruction 与 CFG，不提供 IndexTTS 八维向量、情感参考音频或 duration factor。</p></section><section class="panel"><strong>路径工具</strong><div class="button-grid"><button id="settingsOpenOutputButton" class="secondary">打开输出</button><button id="settingsOpenLogsButton" class="secondary">打开日志</button><button id="settingsOpenDataButton" class="secondary">打开用户数据</button></div></section></div></section>
-        <aside id="globalTaskBar" class="global-task-bar idle" role="status" aria-live="polite"><div class="global-task-copy"><span id="globalTaskKicker">工作台</span><strong id="globalTaskTitle">准备创作</strong><span id="globalTaskDetail">选择生成模式或导入脚本开始。</span></div><progress id="globalTaskProgress" max="100" value="0" hidden></progress><div class="global-task-actions"><button id="globalTaskViewButton" type="button" class="secondary" hidden>查看任务</button><button id="globalTaskCancelButton" type="button" class="danger" hidden>停止</button></div></aside>
+        <aside id="globalTaskBar" class="global-task-bar idle" role="status" aria-live="polite" hidden><div class="global-task-copy"><span id="globalTaskKicker">工作台</span><strong id="globalTaskTitle">准备创作</strong><span id="globalTaskDetail">选择生成模式或导入脚本开始。</span></div><progress id="globalTaskProgress" max="100" value="0" hidden></progress><div class="global-task-actions"><button id="globalTaskViewButton" type="button" class="secondary" hidden>查看任务</button><button id="globalTaskCancelButton" type="button" class="danger" hidden>停止</button></div></aside>
       </section>
       <footer>非官方集成 · 请确保拥有参考声音的全部权利与许可 · BreezeBlue 模型仅限研究与非商业用途</footer>
     </main>
     <dialog id="licenseDialog"><form method="dialog"><button class="dialog-close">关闭</button></form><h2>BreezeBlue 模型许可证</h2><pre id="licenseText">正在读取…</pre></dialog>
-    <script src="renderer.js?v=0.2.5"></script>
+    <script src="renderer.js?v=0.2.6"></script>
   </body>
 </html>

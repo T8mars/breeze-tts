@@ -31,6 +31,7 @@ const state = {
   projectBaseRevision: null,
   projectDirty: false,
   projectDraftTimer: null,
+  globalTaskHideTimer: null,
   selectedLineId: "",
   launching: false,
   launchStartedAt: 0,
@@ -111,7 +112,13 @@ async function api(path, options = {}) {
     headers: { "Content-Type": "application/json", ...(options.headers || {}) }
   });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(typeof payload.detail === "string" ? payload.detail : JSON.stringify(payload.detail || payload));
+  if (!response.ok) {
+    const detail = payload.detail ?? payload;
+    const error = new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+    error.detail = detail;
+    error.status = response.status;
+    throw error;
+  }
   return payload;
 }
 
@@ -124,6 +131,36 @@ function errorMessage(error) {
 function actionableError(error, nextStep) {
   const message = errorMessage(error);
   return nextStep ? `${message}。建议：${nextStep}` : message;
+}
+
+function modelReportFromError(error) {
+  const detail = error?.detail;
+  if (detail && typeof detail === "object") {
+    if (typeof detail.valid === "boolean") return detail;
+    if (detail.model && typeof detail.model.valid === "boolean") return detail.model;
+  }
+  return null;
+}
+
+function modelPreparationMessage(report) {
+  if (!report) return "仍在读取本地环境，请稍候再试。";
+  if (!report.valid) {
+    const missing = Array.isArray(report.missing) ? report.missing.length : 0;
+    const damaged = (Array.isArray(report.size_mismatch) ? report.size_mismatch.length : 0)
+      + (Array.isArray(report.hash_mismatch) ? report.hash_mismatch.length : 0);
+    const details = [missing && `缺少 ${missing} 个文件`, damaged && `${damaged} 个文件需要修复`].filter(Boolean).join("，");
+    return `模型尚未准备完整${details ? `（${details}）` : ""}。请展开下方设置，阅读许可证后点击“下载／修复模型”。`;
+  }
+  if (!report.license_accepted) return "模型文件已经完整，请阅读许可证、勾选同意，再点击“确认并启用”。";
+  return "模型与许可证已经就绪。";
+}
+
+function conciseActionError(error, nextStep) {
+  const report = modelReportFromError(error);
+  if (report) return modelPreparationMessage(report);
+  const message = errorMessage(error).replace(/\s+/g, " ").trim();
+  const concise = message.length > 240 ? `${message.slice(0, 220)}…` : message;
+  return nextStep ? `${concise}。建议：${nextStep}` : concise;
 }
 
 function setActionMessage(target, text, kind = "") {
@@ -139,6 +176,13 @@ function setActionMessage(target, text, kind = "") {
 function setGlobalTask({ kind = "idle", kicker = "工作台", title = "准备创作", detail = "选择生成模式或导入脚本开始。", progress = null, target = "", cancellable = false } = {}) {
   const bar = $("globalTaskBar");
   if (!bar) return;
+  window.clearTimeout(state.globalTaskHideTimer);
+  state.globalTaskHideTimer = null;
+  if (kind === "idle" && !target && title === "准备创作") {
+    bar.hidden = true;
+    return;
+  }
+  bar.hidden = false;
   bar.className = `global-task-bar ${kind}`;
   bar.dataset.kind = kind;
   bar.dataset.target = target;
@@ -151,6 +195,12 @@ function setGlobalTask({ kind = "idle", kicker = "工作台", title = "准备创
   else if (progress !== null) progressElement.value = Math.max(0, Math.min(100, Number(progress) || 0));
   $("globalTaskViewButton").hidden = !target;
   $("globalTaskCancelButton").hidden = !cancellable;
+  if (kind === "idle" || kind === "success") {
+    state.globalTaskHideTimer = window.setTimeout(() => {
+      bar.hidden = true;
+      state.globalTaskHideTimer = null;
+    }, kind === "success" ? 7000 : 3500);
+  }
 }
 
 function updateContinueDraftTemplate() {
@@ -341,7 +391,6 @@ function transformersCompatible(version) {
 
 function renderModel(report) {
   const summary = $("modelSummary");
-  const advanced = $("advancedLauncher");
   summary.classList.remove("ready-text");
   if (report.valid) {
     const license = report.license_accepted ? "许可证已确认" : "等待许可证确认";
@@ -358,10 +407,6 @@ function renderModel(report) {
     summary.textContent = problems || "模型尚未安装。";
     setStatus("", "等待完整模型");
     $("advancedLauncherSummary").textContent = "模型尚未就绪 · 展开完成配置";
-  }
-  if (advanced && !advanced.dataset.autoSet) {
-    advanced.open = !(report.valid && report.license_accepted);
-    advanced.dataset.autoSet = "true";
   }
 }
 
@@ -1510,16 +1555,37 @@ function showWorkspaceTab(tab) {
 
 async function launchStudio(templateId = "blank") {
   if (state.launching) return;
+  if (!state.diagnostics?.model) await refresh();
+  const model = state.diagnostics?.model;
+  if (!model?.valid || !model?.license_accepted) {
+    const message = modelPreparationMessage(model);
+    const feedback = $("quickLaunchFeedback");
+    feedback.hidden = false;
+    feedback.classList.remove("error");
+    feedback.classList.add("needs-attention");
+    $("quickLaunchProgress").hidden = true;
+    $("quickLaunchHeading").textContent = "开始前还差一步";
+    $("quickLaunchStatus").textContent = message;
+    $("quickLaunchElapsed").hidden = true;
+    setActionMessage("launchStatus", "完成模型准备后，再点击启动或创作模板。", "");
+    const advanced = $("advancedLauncher");
+    advanced.open = true;
+    advanced.scrollIntoView({ behavior: "smooth", block: "start" });
+    window.setTimeout(() => (model?.valid ? $("acceptLicense") : $("downloadModelButton"))?.focus(), 350);
+    return;
+  }
   state.launching = true;
   state.launchStartedAt = Date.now();
   $("startStudioButton").disabled = true;
   document.querySelectorAll(".template-card").forEach((button) => { button.disabled = true; });
   $("quickLaunchFeedback").hidden = false;
-  $("quickLaunchFeedback").classList.remove("error");
+  $("quickLaunchFeedback").classList.remove("error", "needs-attention");
   $("quickLaunchProgress").hidden = false;
   $("quickLaunchProgress").removeAttribute("value");
+  $("quickLaunchHeading").textContent = "正在启动工作台";
   $("quickLaunchStatus").textContent = "正在校验模型与许可证…";
   $("quickLaunchElapsed").textContent = "已等待 0 秒";
+  $("quickLaunchElapsed").hidden = false;
   $("launchProgress").hidden = false;
   $("launchProgress").removeAttribute("value");
   $("launchElapsed").hidden = false;
@@ -1531,8 +1597,6 @@ async function launchStudio(templateId = "blank") {
   }, 1000);
   $("launchStatus").textContent = "阶段 1/2：正在校验模型与许可证…";
   try {
-    const model = state.diagnostics?.model;
-    if (!model?.valid || !model?.license_accepted) await activateCurrentModel();
     $("launchStatus").textContent = "阶段 2/2：正在把模型加载到显存，首次启动可能需要几分钟…";
     $("quickLaunchStatus").textContent = "正在把模型加载到显存，首次启动可能需要几分钟…";
     const runtime = await api("/api/runtime/load", {
@@ -1546,11 +1610,12 @@ async function launchStudio(templateId = "blank") {
     $("quickLaunchFeedback").hidden = true;
     window.scrollTo({ top: 0, behavior: "smooth" });
   } catch (error) {
-    const message = `启动失败：${actionableError(error, "返回首页检查模型完整性、许可证和环境诊断后重试")}`;
+    const message = `启动失败：${conciseActionError(error, "展开“环境诊断、扩展组件与更新”查看详情后重试")}`;
     setActionMessage("launchStatus", message, "error");
     $("quickLaunchFeedback").classList.add("error");
     $("quickLaunchProgress").hidden = true;
     $("quickLaunchStatus").textContent = message;
+    $("quickLaunchElapsed").hidden = true;
   } finally {
     window.clearInterval(state.launchTimer);
     state.launchTimer = null;
@@ -2201,9 +2266,9 @@ $('importVoiceButton').addEventListener('click', () => importVoiceBundle().catch
 $("deleteVoiceButton").addEventListener("click", () => deleteSelectedVoice().catch((error) => { $("voiceStatus").textContent = error.message; }));
 $("chooseModelButton").addEventListener("click", () => chooseModelDirectory().catch((error) => { $("downloadStatus").textContent = error.message; }));
 $("chooseOutputButton").addEventListener("click", () => chooseOutputDirectory().catch((error) => { $("outputStatus").textContent = error.message; }));
-$("downloadModelButton").addEventListener("click", () => downloadModel().catch((error) => { $("downloadStatus").textContent = error.message; }));
-$("activateModelButton").addEventListener("click", () => activateCurrentModel().catch((error) => { $("downloadStatus").textContent = error.message; }));
-$("verifyModelButton").addEventListener("click", () => verifyCurrentModel().catch((error) => { $("downloadStatus").textContent = error.message; }));
+$("downloadModelButton").addEventListener("click", () => downloadModel().catch((error) => { setActionMessage("downloadStatus", conciseActionError(error, "检查模型目录是否可写和网络是否可用"), "error"); }));
+$("activateModelButton").addEventListener("click", () => activateCurrentModel().catch((error) => { setActionMessage("downloadStatus", conciseActionError(error, "若模型不完整，请先点击“下载／修复模型”"), "error"); }));
+$("verifyModelButton").addEventListener("click", () => verifyCurrentModel().catch((error) => { setActionMessage("downloadStatus", conciseActionError(error, "若校验失败，请点击“下载／修复模型”"), "error"); }));
 $("cancelDownloadButton").addEventListener("click", () => api("/api/models/download/cancel", { method: "POST" }).catch((error) => { $("downloadStatus").textContent = error.message; }));
 $("generateButton").addEventListener("click", () => generate().catch((error) => { $("generationStatus").textContent = error.message; }));
 $("cancelGenerateButton").addEventListener("click", cancelGeneration);

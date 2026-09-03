@@ -89,6 +89,7 @@ test("creation templates and direction recipes stay within Breeze capabilities",
   assert.match(html, /data-template="subtitle"/);
   assert.match(html, /id="continueDraftTemplate"[^>]+disabled/);
   assert.match(html, /id="quickLaunchFeedback"[^>]+aria-live="polite"[^>]+hidden/);
+  assert.doesNotMatch(html, /id="advancedLauncher"[^>]+open/);
   assert.match(renderer, /const CREATION_TEMPLATES =/);
   assert.match(renderer, /function applyCreationTemplate/);
   assert.match(renderer, /quickLaunchStatus/);
@@ -97,9 +98,30 @@ test("creation templates and direction recipes stay within Breeze capabilities",
   assert.doesNotMatch(renderer, /emotion_vector|duration_factor/);
 });
 
+test("first-run model preparation stays on a clean launcher with concise guidance", () => {
+  const launchSource = sourceBetween(renderer, "async function launchStudio", "async function returnToLauncher");
+  assert.match(launchSource, /if \(!model\?\.valid \|\| !model\?\.license_accepted\)/);
+  assert.match(launchSource, /modelPreparationMessage\(model\)/);
+  assert.match(launchSource, /advanced\.open = true/);
+  assert.ok(launchSource.indexOf("if (!model?.valid || !model?.license_accepted)") < launchSource.indexOf("state.launching = true"));
+  assert.doesNotMatch(launchSource, /await activateCurrentModel\(\)/);
+  assert.match(renderer, /message\.length > 240/);
+  assert.match(css, /\.launcher-grid > \*\s*\{[^}]*min-width:\s*0/);
+  assert.match(css, /\.launcher-grid\s*\{[^}]*minmax\(0, 1\.2fr\)/);
+  assert.match(css, /\.quick-launch-feedback span\s*\{[^}]*overflow-wrap:\s*anywhere/);
+});
+
+test("inline vocal events are visible in both Chinese and English", () => {
+  for (const event of ["[笑]", "[咳嗽]", "[清嗓子]", "[叹气]", "(laugh)", "(cough)", "(clears throat)", "(sigh)"]) {
+    assert.ok(html.includes(`<code>${event}</code>`), `missing inline vocal event: ${event}`);
+  }
+});
+
 test("global task feedback and keyboard tabs remain available across pages", () => {
-  assert.match(html, /id="globalTaskBar"[^>]+aria-live="polite"/);
+  assert.match(html, /id="globalTaskBar"[^>]+aria-live="polite"[^>]+hidden/);
   assert.match(renderer, /function setGlobalTask/);
+  assert.match(renderer, /kind === "success" \? 7000 : 3500/);
+  assert.match(renderer, /bar\.hidden = true/);
   assert.match(renderer, /function workspaceTabKeydown/);
   assert.match(renderer, /\["ArrowLeft", "ArrowRight", "Home", "End"\]/);
   assert.match(renderer, /button\.tabIndex = active \? 0 : -1/);

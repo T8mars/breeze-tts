@@ -14,9 +14,9 @@
 > [!NOTE]
 > This workspace also contains the unofficial **T8star-Aix Voice Studio** Windows portable integration and the user-requested `comfyui-breeze-tts-T8` node package. See [`T8_DISTRIBUTION.md`](T8_DISTRIBUTION.md) and [`roadmap.md`](roadmap.md). These additions are not affiliated with or endorsed by BreezeBlue.
 
-### T8star-Aix Voice Studio 0.2.5
+### T8star-Aix Voice Studio 0.2.6
 
-The Windows integration uses an IndexTTS 2.5-inspired light launcher and functional workbench. Version 0.2.5 adds four real ComfyUI canvas workflows for design, clone, direction, and desktop voice bundles, while keeping HTTP API prompt examples clearly separate. The desktop keeps the editable-timeline production loop: per-line rerun, project backfill, revision-safe state synchronization, and automatic full-timeline remix when every line has audio. Missing clips, failed reruns, stale audio, and concurrent project edits have explicit safe states. Full-project generation saves first, generates only missing or generation-dirty lines, and timing-only edits remix without rerunning speech. It retains quick-start templates, Voice Library 2.0, per-line natural-language direction, SRT write-back, secure bundles, history, and a recoverable queue. IndexTTS-only controls such as 8D emotion vectors, emotion-reference audio, `duration_factor`, CFM controls, and unsupported languages are deliberately not exposed as Breeze capabilities.
+The Windows integration uses an IndexTTS 2.5-inspired light launcher and functional workbench. Version 0.2.6 makes inline vocal events discoverable in both the standalone desktop bundle and all four ComfyUI canvas workflows, including `[笑]`, `[咳嗽]`, `[清嗓子]`, `[叹气]`, `(laugh)`, `(cough)`, `(clears throat)`, and `(sigh)`. The desktop keeps the editable-timeline production loop: per-line rerun, project backfill, revision-safe state synchronization, and automatic full-timeline remix when every line has audio. The ComfyUI deliverable remains an install-only custom node package for an existing ComfyUI, while the separate Voice Studio bundle contains its own launcher. HTTP API prompt examples stay clearly separated from frontend workflow JSON.
 
 ## 📰 News
 
