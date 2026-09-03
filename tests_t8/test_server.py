@@ -146,3 +146,4 @@ def test_capabilities_are_explicit(monkeypatch, tmp_path):
         assert capabilities["batch"] is True
         assert capabilities["srt"] is True
         assert isinstance(capabilities["whisper"], bool)
+        assert isinstance(capabilities["whisper_small_bundled"], bool)

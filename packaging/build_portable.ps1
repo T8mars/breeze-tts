@@ -2,6 +2,7 @@
 param(
     [switch]$SkipRuntime,
     [switch]$SkipNpmInstall,
+    [switch]$SkipPortableZip,
     [switch]$IncludeInstaller
 )
 
@@ -62,6 +63,19 @@ Get-ChildItem -LiteralPath (Join-Path $projectRoot 'models') -Force |
 if (Test-Path -LiteralPath (Join-Path $modelsStage 'Breeze-TTS-2')) {
     throw 'Model weights must not be embedded in the portable package staging directory.'
 }
+$whisperSource = Join-Path $projectRoot '.runtime\whisper-models\faster-whisper-small'
+$whisperTarget = Join-Path $modelsStage 'faster-whisper-small'
+$whisperFiles = @('.gitattributes', 'README.md', 'config.json', 'model.bin', 'tokenizer.json', 'vocabulary.txt')
+foreach ($file in $whisperFiles) {
+    $sourceFile = Join-Path $whisperSource $file
+    if (-not (Test-Path -LiteralPath $sourceFile -PathType Leaf)) {
+        throw "Bundled Whisper Small model is missing $file. Run packaging\build_runtime.ps1 first."
+    }
+}
+New-Item -ItemType Directory -Force -Path $whisperTarget | Out-Null
+foreach ($file in $whisperFiles) {
+    Copy-Item -LiteralPath (Join-Path $whisperSource $file) -Destination $whisperTarget -Force
+}
 New-Item -ItemType Directory -Force -Path (Join-Path $backendStage 'desktop') | Out-Null
 Copy-Item -LiteralPath (Join-Path $desktopRoot 'src') -Destination (Join-Path $backendStage 'desktop') -Recurse -Force
 foreach ($file in @(
@@ -70,6 +84,7 @@ foreach ($file in @(
     'THIRD_PARTY_NOTICES.md',
     'requirements-desktop.lock.txt',
     'requirements-whisper.txt',
+    'WHISPER_NOTICE.md',
     'T8_DISTRIBUTION.md'
 )) {
     Copy-Item -LiteralPath (Join-Path $projectRoot $file) -Destination $backendStage -Force
@@ -158,7 +173,11 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Production npm dependency audit failed.' }
     npm test
     if ($LASTEXITCODE -ne 0) { throw 'Desktop regression tests failed.' }
-    npm run make:portable
+    if ($SkipPortableZip) {
+        npm run package
+    } else {
+        npm run make:portable
+    }
     if ($LASTEXITCODE -ne 0) { throw 'Electron package build failed.' }
     npm run verify
     if ($LASTEXITCODE -ne 0) { throw 'Packaged application verification failed.' }
@@ -169,15 +188,19 @@ try {
     $env:T8_ELECTRON_ZIP_DIR = $previousElectronZipDir
 }
 
-$artifactPath = $generatedTargets[1]
-if (-not (Test-Path -LiteralPath $artifactPath -PathType Leaf)) {
-    throw "Portable zip artifact was not produced: $artifactPath"
+if ($SkipPortableZip) {
+    Write-Host "Extracted portable package complete: $($generatedTargets[0])"
+} else {
+    $artifactPath = $generatedTargets[1]
+    if (-not (Test-Path -LiteralPath $artifactPath -PathType Leaf)) {
+        throw "Portable zip artifact was not produced: $artifactPath"
+    }
+    $artifacts = @(Get-Item -LiteralPath $artifactPath)
+    $lines = foreach ($artifact in $artifacts) {
+        $hash = (Get-FileHash -LiteralPath $artifact.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+        "$hash  $($artifact.Name)"
+    }
+    $checksumPath = Join-Path $desktopRoot 'out\make\SHA256SUMS.txt'
+    [System.IO.File]::WriteAllLines($checksumPath, $lines, [System.Text.UTF8Encoding]::new($false))
+    Write-Host "Portable artifact complete. Checksums: $checksumPath"
 }
-$artifacts = @(Get-Item -LiteralPath $artifactPath)
-$lines = foreach ($artifact in $artifacts) {
-    $hash = (Get-FileHash -LiteralPath $artifact.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-    "$hash  $($artifact.Name)"
-}
-$checksumPath = Join-Path $desktopRoot 'out\make\SHA256SUMS.txt'
-[System.IO.File]::WriteAllLines($checksumPath, $lines, [System.Text.UTF8Encoding]::new($false))
-Write-Host "Portable artifact complete. Checksums: $checksumPath"

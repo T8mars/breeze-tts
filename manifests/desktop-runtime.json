@@ -16,11 +16,14 @@
     "soundfile": "0.14.0",
     "fastapi": "0.141.1",
     "uvicorn": "0.52.4",
-    "websockets": "16.1.1"
+    "websockets": "16.1.1",
+    "faster-whisper": "1.2.1",
+    "ctranslate2": "4.8.2",
+    "av": "17.1.0"
   },
   "resolved_lock": "requirements-desktop.lock.txt",
-  "resolved_lock_sha256": "1a87cf98e201723f0235614dbf601d124fe8c7c744db9e461498c647688226da",
-  "runtime_size_bytes": 5413454032,
+  "resolved_lock_sha256": "9ec2e8e97912b05758bf0fedf7297b4699c0d465fb393a0932383a29728de802",
+  "runtime_size_bytes": 5547371762,
   "verification": [
     "packaging/verify_runtime.py",
     "python -m pip check"

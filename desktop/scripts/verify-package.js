@@ -24,6 +24,11 @@ const required = [
   "resources/backend/MODEL_LICENSE",
   "resources/backend/NOTICE",
   "resources/backend/requirements-desktop.lock.txt",
+  "resources/backend/WHISPER_NOTICE.md",
+  "resources/backend/models/faster-whisper-small/config.json",
+  "resources/backend/models/faster-whisper-small/model.bin",
+  "resources/backend/models/faster-whisper-small/tokenizer.json",
+  "resources/backend/models/faster-whisper-small/vocabulary.txt",
   "resources/backend/T8_DISTRIBUTION.md"
 ];
 for (const relative of required) {
@@ -84,7 +89,7 @@ const python = path.join(root, "resources/python/python.exe");
 const backend = path.join(root, "resources/backend");
 const smoke = spawnSync(
   python,
-  ["-c", "import torch,transformers,qwen_tts,t8_runtime.server; print(torch.__version__,transformers.__version__)"],
+  ["-c", "import torch,transformers,qwen_tts,faster_whisper,t8_runtime.server; from t8_runtime.transcription import bundled_whisper_small_available; assert bundled_whisper_small_available(); print(torch.__version__,transformers.__version__)"],
   {
     cwd: backend,
     encoding: "utf8",

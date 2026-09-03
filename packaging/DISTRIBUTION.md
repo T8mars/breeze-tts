@@ -83,7 +83,7 @@ $env:T8_BREEZE_UPDATE_URL = 'https://downloads.example.com/breeze/windows/'
 
 The application accepts only HTTPS URLs without embedded credentials. Without a
 valid feed it makes no update request and keeps the offline manifest verifier
-available. Version 0.2.7 uses manual download/replace updates; production EXEs
+available. Version 0.2.8 uses manual download/replace updates; production EXEs
 should be Authenticode signed by the same trusted publisher.
 
 ## Offline integrity check

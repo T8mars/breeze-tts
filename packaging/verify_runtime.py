@@ -15,6 +15,7 @@ EXPECTED = {
     "torchaudio": "2.9.1",
     "transformers": "4.57.3",
     "qwen-tts": "0.1.1",
+    "faster-whisper": "1.2.1",
 }
 
 
@@ -50,7 +51,7 @@ def main() -> int:
         if actual.split("+")[0] != expected:
             errors.append(f"{package}: expected {expected}, got {actual}")
 
-    for module in ("torch", "torchaudio", "transformers", "qwen_tts", "fastapi", "uvicorn", "websockets", "soundfile"):
+    for module in ("torch", "torchaudio", "transformers", "qwen_tts", "fastapi", "uvicorn", "websockets", "soundfile", "faster_whisper"):
         try:
             importlib.import_module(module)
         except Exception as exc:

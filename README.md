@@ -14,9 +14,9 @@
 > [!NOTE]
 > This workspace also contains the unofficial **T8star-Aix Voice Studio** Windows portable integration and the user-requested `comfyui-breeze-tts-T8` node package. See [`T8_DISTRIBUTION.md`](T8_DISTRIBUTION.md) and [`roadmap.md`](roadmap.md). These additions are not affiliated with or endorsed by BreezeBlue.
 
-### T8star-Aix Voice Studio 0.2.7
+### T8star-Aix Voice Studio 0.2.8
 
-The Windows integration uses an IndexTTS 2.5-inspired light launcher and functional workbench. Version 0.2.7 adds a complete Voice Library 2.1 flow with its own reference-audio upload, stored-reference playback, accurate transcript, replacement/removal controls, and one-click reuse in generation. It also makes inline vocal events discoverable in both the standalone desktop bundle and all four ComfyUI canvas workflows, including `[笑]`, `[咳嗽]`, `[清嗓子]`, `[叹气]`, `(laugh)`, `(cough)`, `(clears throat)`, and `(sigh)`. The desktop keeps the editable-timeline production loop: per-line rerun, project backfill, revision-safe state synchronization, and automatic full-timeline remix when every line has audio. The ComfyUI deliverable remains an install-only custom node package for an existing ComfyUI, while the separate Voice Studio bundle contains its own launcher. HTTP API prompt examples stay clearly separated from frontend workflow JSON.
+The Windows integration uses an IndexTTS 2.5-inspired light launcher and functional workbench. Version 0.2.8 bundles `faster-whisper` and the pinned Whisper Small checkpoint for offline default transcription, fixes the managed-runtime repair installer, adds runnable examples for every batch format, and resets the Voice Library cleanly after deletion. Voice Library 2.1 provides its own reference-audio upload, stored-reference playback, accurate transcript, replacement/removal controls, and one-click reuse in generation. Inline vocal events remain available in the desktop bundle and all four ComfyUI workflows, while the editable timeline retains per-line rerun, project backfill, revision-safe synchronization, and automatic full-timeline remix.
 
 ## 📰 News
 

@@ -70,8 +70,8 @@ const GENERATION_CONFLICT_IDS = [
   "unloadButton",
   "chooseOutputButton"
 ];
-const VOICE_CONTROL_IDS = ["voiceSelect", "libraryVoiceSelect", "voiceName", "voiceMode", "voiceLanguage", "voiceInstruction", "voiceReferenceAudio", "voiceReferenceText", "voiceTags", "voiceNotes", "voicePreviewText", "voiceFavorite", "applyVoiceButton", "saveVoiceButton", "updateVoiceButton", "deleteVoiceButton", "refreshVoicesButton", "exportVoiceButton", "importVoiceButton"];
-const BATCH_CONTROL_IDS = ["batchKind", "batchInput", "analyzeRolesButton"];
+const VOICE_CONTROL_IDS = ["voiceSelect", "libraryVoiceSelect", "voiceName", "voiceMode", "voiceLanguage", "voiceInstruction", "voiceReferenceAudio", "voiceReferenceText", "voiceTags", "voiceNotes", "voicePreviewText", "voiceFavorite", "newVoiceButton", "applyVoiceButton", "saveVoiceButton", "updateVoiceButton", "deleteVoiceButton", "refreshVoicesButton", "exportVoiceButton", "importVoiceButton"];
+const BATCH_CONTROL_IDS = ["batchKind", "batchInput", "analyzeRolesButton", "loadBatchExampleButton", "clearBatchInputButton"];
 const CREATION_TEMPLATES = {
   blank: { tab: "generate", mode: "design" },
   narration: {
@@ -107,6 +107,14 @@ const DIRECTION_RECIPES = {
 };
 const RECIPE_INTENSITY = { subtle: "情绪克制", natural: "情绪自然", strong: "情绪鲜明" };
 const RECIPE_PACE = { slow: "节奏舒缓", natural: "节奏自然", fast: "节奏紧凑" };
+const INLINE_VOCAL_EVENT_ROLES = new Set(["笑", "咳嗽", "清嗓子", "叹气"]);
+const BATCH_EXAMPLES = {
+  items: "欢迎使用 Breeze TTS 2，这是普通批量的第一句示例。\n第二句可以继续编辑，解析后会进入可调整的时间轴。\nThis is a real English batch example.",
+  script: "旁白：夜色渐深，故事从这里开始。\n小雨：[笑] 你终于来了！\n阿诚：(sigh) 对不起，让你久等了。",
+  srt: "1\n00:00:00,000 --> 00:00:02,400\n欢迎使用 Breeze TTS 2。\n\n2\n00:00:02,700 --> 00:00:05,200\n这是可编辑时间轴的字幕示例。",
+  txt: "旁白 | 欢迎使用逐句演绎 | zh | 平静、从容\n角色A | [笑] 很高兴见到你 | zh | 温暖、轻快\n角色B | This is a real English example. | en | confident",
+  json: "{\n  \"name\": \"Breeze 示例工程\",\n  \"lines\": [\n    {\"role\": \"旁白\", \"text\": \"这是 JSON 工程示例。\", \"start_ms\": 0, \"end_ms\": 2400}\n  ]\n}"
+};
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -472,8 +480,10 @@ function renderCapabilities(capabilities) {
     return item;
   }));
   $("whisperStatus").textContent = capabilities?.whisper
-    ? "Whisper 已启用；首次转写会加载所选模型。"
-    : "未安装 faster-whisper；可点击下方按钮联网安装，完成后需重启应用。";
+    ? (capabilities?.whisper_small_bundled
+      ? "Whisper small 已随整合包内置，可直接离线转写；其他规格首次使用时联网下载并缓存。"
+      : "Whisper 引擎可用，但内置 small 模型缺失；可继续联网下载，建议重新下载完整整合包。")
+    : "内置 faster-whisper 组件缺失；请重新下载完整整合包，或点击下方按钮联网修复。";
   $("installWhisperButton").hidden = Boolean(capabilities?.whisper) || state.whisperInstallComplete;
   updateControlState();
 }
@@ -527,7 +537,7 @@ function renderLibraryVoices() {
     empty.querySelector("strong").textContent = hasAnyVoice ? "没有匹配的音色" : "还没有可用音色";
     empty.querySelector("span").textContent = hasAnyVoice
       ? "换一个关键词或关闭“只看收藏”后再试。"
-      : "填写右侧信息并点击“新建音色”，以后即可一键复用。";
+      : "点击“开始新建”，上传参考音频并保存为可复用音色。";
   }
   updateControlState();
 }
@@ -1012,6 +1022,24 @@ function markVoiceReferenceForRemoval() {
   updateControlState();
 }
 
+function beginNewVoice(message = "当前为新建模式：填写名称，上传参考音频并填写准确逐字稿。") {
+  state.selectedVoiceId = "";
+  $("voiceSelect").value = "";
+  $("libraryVoiceSelect").value = "";
+  $("voiceName").value = "";
+  $("voiceMode").value = "clone";
+  $("voiceLanguage").value = "auto";
+  $("voiceInstruction").value = "";
+  $("voiceReferenceText").value = "";
+  $("voiceTags").value = "";
+  $("voiceNotes").value = "";
+  $("voicePreviewText").value = "你好，这是一段音色库试听。";
+  $("voiceFavorite").checked = false;
+  renderVoiceReferenceEditor();
+  setActionMessage("voiceStatus", message, "success");
+  window.requestAnimationFrame(() => $("voiceName")?.focus());
+}
+
 function selectLibraryVoice() {
   const voice = state.voices.find((item) => item.id === $("libraryVoiceSelect").value);
   if (!voice) {
@@ -1152,19 +1180,20 @@ async function deleteSelectedVoice() {
   await api(`/api/voices/${encodeURIComponent(voice.id)}`, { method: "DELETE" });
   state.selectedVoiceId = "";
   await refreshVoices();
-  $("voiceStatus").textContent = `已删除音色“${voice.name}”。`;
+  beginNewVoice(`已删除音色“${voice.name}”，现在可直接新建另一个音色。`);
 }
 
 async function transcribeReference() {
   if (!state.capabilities.whisper) {
-    throw new Error("未安装 faster-whisper；请先联网安装 Whisper 组件并重启应用。");
+    throw new Error("内置 faster-whisper 组件缺失；请重新下载完整整合包或使用修复按钮。");
   }
   const reference = $("referenceAudio").files[0];
   if (!reference) throw new Error("请先选择参考音频。");
   await inspectReferenceAudio(reference);
   state.transcribing = true;
   updateControlState();
-  $("whisperStatus").textContent = "正在转写；首次使用可能需要下载并加载 Whisper 模型…";
+  const bundled = $("whisperModel").value === "small" && state.capabilities.whisper_small_bundled;
+  $("whisperStatus").textContent = bundled ? "正在使用整合包内置 Whisper small 转写…" : "正在下载或加载所选 Whisper 模型…";
   try {
     const result = await api("/api/tools/transcribe", {
       method: "POST",
@@ -1233,13 +1262,18 @@ function detectRoleNames(text) {
     if (!line || /^\d+$/.test(line) || /-->/.test(line)) continue;
     const match = line.match(/^\[([^\]]{1,80})\]\s*\S/) || line.match(/^([^：:|]{1,80})\s*[：:]\s*\S/) || line.match(/^([^|]{1,80})\s*\|\s*\S/);
     const role = match?.[1]?.trim();
+    if (INLINE_VOCAL_EVENT_ROLES.has(String(role || "").toLocaleLowerCase())) continue;
     if (role && !roles.some((item) => normalizeRoleName(item) === normalizeRoleName(role))) roles.push(role);
   }
   return roles;
 }
 
 function looksMultiRoleScript(text) {
-  return String(text || "").split(/\r?\n/).some((line) => /^\s*(?:\[[^\]]+\]|[^：:]{1,40}[：:])\s*\S/.test(line));
+  return String(text || "").split(/\r?\n/).some((line) => {
+    const bracket = line.match(/^\s*\[([^\]]+)\]\s*\S/);
+    if (bracket) return !INLINE_VOCAL_EVENT_ROLES.has(bracket[1].trim().toLocaleLowerCase());
+    return /^\s*[^：:]{1,40}[：:]\s*\S/.test(line);
+  });
 }
 
 function shouldShowRoleMappings() {
@@ -1267,6 +1301,22 @@ function updateBatchKind() {
   $("batchInputHint").textContent = content[2];
   $("roleMappingPanel").hidden = !shouldShowRoleMappings();
   updateControlState();
+}
+
+function loadBatchExample() {
+  const kind = $("batchKind").value;
+  $("batchInput").value = BATCH_EXAMPLES[kind] || BATCH_EXAMPLES.items;
+  updateBatchKind();
+  updateDetectedRoles();
+  setActionMessage("batchStatus", `已载入${$("batchInputLabel").textContent}示例；可直接修改或点击“解析并检查”。`, "success");
+  $("batchInput").focus();
+}
+
+function clearBatchInput() {
+  $("batchInput").value = "";
+  updateDetectedRoles();
+  setActionMessage("batchStatus", "输入区已清空；已有时间轴不会被删除。", "success");
+  $("batchInput").focus();
 }
 
 function renderRoleMappings(roles) {
@@ -1578,14 +1628,15 @@ async function remixCompletedDialogueProject(project) {
 
 async function transcribeVoiceReference() {
   if (!state.capabilities.whisper) {
-    throw new Error("未安装 faster-whisper；可先手动填写逐字稿，或在生成页安装 Whisper 组件后重启。");
+    throw new Error("内置 faster-whisper 组件缺失；请重新下载完整整合包或使用修复按钮。");
   }
   const reference = $("voiceReferenceAudio").files[0];
   if (!reference) throw new Error("请先在音色库上传新的参考音频。");
   await inspectReferenceAudio(reference);
   state.transcribing = true;
   updateControlState();
-  $("voiceReferenceStatus").textContent = "正在识别参考音频，首次使用可能需要下载 Whisper 模型…";
+  const bundled = $("whisperModel").value === "small" && state.capabilities.whisper_small_bundled;
+  $("voiceReferenceStatus").textContent = bundled ? "正在使用整合包内置 Whisper small 识别参考音频…" : "正在下载或加载所选 Whisper 模型…";
   try {
     const result = await api("/api/tools/transcribe", {
       method: "POST",
@@ -2400,6 +2451,7 @@ $("copyDiagnosticsButton").addEventListener("click", async () => {
 $("checkUpdateButton").addEventListener("click", () => checkForDesktopUpdates().catch((error) => { $("updateStatus").textContent = error.message; }));
 $("installUpdateButton").addEventListener("click", () => installDesktopUpdate().catch((error) => { $("updateStatus").textContent = error.message; }));
 $("refreshVoicesButton").addEventListener("click", () => refreshVoices().catch((error) => { $("voiceStatus").textContent = error.message; }));
+$("newVoiceButton").addEventListener("click", () => beginNewVoice());
 $("voiceSelect").addEventListener("change", applySelectedVoice);
 $('libraryVoiceSelect').addEventListener('change', selectLibraryVoice);
 $('voiceSearch').addEventListener('input', renderLibraryVoices);
@@ -2417,8 +2469,8 @@ $("historyKind").addEventListener("change", () => { state.historyPage = 1; rende
 $("historyPrevious").addEventListener("click", () => { state.historyPage -= 1; renderHistory(); });
 $("historyNext").addEventListener("click", () => { state.historyPage += 1; renderHistory(); });
 $("applyVoiceButton").addEventListener("click", applyLibraryVoiceToGeneration);
-$("saveVoiceButton").addEventListener("click", () => saveCurrentVoice().catch((error) => { $("voiceStatus").textContent = error.message; }));
-$('updateVoiceButton').addEventListener('click', () => updateSelectedVoice().catch((error) => { $("voiceStatus").textContent = error.message; }));
+$("saveVoiceButton").addEventListener("click", () => saveCurrentVoice().catch((error) => { setActionMessage("voiceStatus", actionableError(error, "确认名称、音色类型、参考音频与逐字稿后重试"), "error"); }));
+$('updateVoiceButton').addEventListener('click', () => updateSelectedVoice().catch((error) => { setActionMessage("voiceStatus", actionableError(error, "确认参考音频与逐字稿仍完整"), "error"); }));
 $('exportVoiceButton').addEventListener('click', () => exportSelectedVoice().catch((error) => { $("voiceStatus").textContent = error.message; }));
 $('importVoiceButton').addEventListener('click', () => importVoiceBundle().catch((error) => { $("voiceStatus").textContent = error.message; }));
 $("deleteVoiceButton").addEventListener("click", () => deleteSelectedVoice().catch((error) => { $("voiceStatus").textContent = error.message; }));
@@ -2470,6 +2522,8 @@ $("transcribeButton").addEventListener("click", () => transcribeReference().catc
 $("installWhisperButton").addEventListener("click", () => installWhisperComponent().catch((error) => { $("whisperStatus").textContent = error.message; }));
 $("batchKind").addEventListener("change", updateBatchKind);
 $("batchInput").addEventListener("input", updateDetectedRoles);
+$("loadBatchExampleButton").addEventListener("click", loadBatchExample);
+$("clearBatchInputButton").addEventListener("click", clearBatchInput);
 $("roleMappingPanel").addEventListener("change", (event) => {
   if (state.batching) return;
   const role = event.target.dataset.role;

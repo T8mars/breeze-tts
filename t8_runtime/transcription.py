@@ -4,6 +4,28 @@ from importlib.util import find_spec
 from pathlib import Path
 from typing import Any
 
+from .config import project_root, user_data_dir
+
+
+_BUNDLED_SMALL_FILES = ("config.json", "model.bin", "tokenizer.json", "vocabulary.txt")
+
+
+def bundled_whisper_model_dir() -> Path:
+    return project_root() / "models" / "faster-whisper-small"
+
+
+def bundled_whisper_small_available() -> bool:
+    root = bundled_whisper_model_dir()
+    return all((root / name).is_file() and (root / name).stat().st_size > 0 for name in _BUNDLED_SMALL_FILES)
+
+
+def resolve_whisper_model(model_size: str) -> tuple[str, Path | None, bool]:
+    if model_size == "small" and bundled_whisper_small_available():
+        return str(bundled_whisper_model_dir()), None, True
+    cache = user_data_dir() / "models" / "whisper"
+    cache.mkdir(parents=True, exist_ok=True)
+    return model_size, cache, False
+
 
 def whisper_available() -> bool:
     return find_spec("faster_whisper") is not None
@@ -17,14 +39,18 @@ def transcribe_audio(
 ) -> dict[str, Any]:
     if not whisper_available():
         raise RuntimeError(
-            "未安装可选的 faster-whisper。运行 packaging/install_whisper.ps1 后重启应用即可启用。"
+            "内置 faster-whisper 组件缺失。请重新下载完整整合包，或运行 packaging/install_whisper.ps1 修复。"
         )
     import torch
     from faster_whisper import WhisperModel
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     compute_type = "float16" if device == "cuda" else "int8"
-    model = WhisperModel(model_size, device=device, compute_type=compute_type)
+    model_source, download_root, bundled = resolve_whisper_model(model_size)
+    model_options: dict[str, Any] = {"device": device, "compute_type": compute_type}
+    if download_root is not None:
+        model_options["download_root"] = str(download_root)
+    model = WhisperModel(model_source, **model_options)
     segments, info = model.transcribe(
         str(path), language=language or None, vad_filter=True, beam_size=5
     )
@@ -45,6 +71,7 @@ def transcribe_audio(
         "srt": "\n\n".join(srt_blocks) + ("\n" if srt_blocks else ""),
         "model_size": model_size,
         "device": device,
+        "bundled_model": bundled,
     }
 
 

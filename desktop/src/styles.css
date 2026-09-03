@@ -181,11 +181,14 @@ pre { max-height: 230px; overflow: auto; white-space: pre-wrap; word-break: brea
 .voice-browser select { margin-top: 12px; min-height: 380px; }
 .voice-editor-intro { margin-bottom: 16px; padding: 13px 15px; border: 1px solid #ffd2df; border-radius: 10px; background: linear-gradient(135deg, #fff8fb, #f7f9ff); }
 .voice-editor-intro p { margin: 5px 0 0; color: var(--text-secondary); font-size: 0.84rem; line-height: 1.55; }
+.editor-status { margin: 0 0 16px; padding: 10px 12px; border-left: 3px solid var(--brand); border-radius: 6px; background: var(--brand-soft); color: var(--text-secondary); line-height: 1.5; }
 .voice-favorite { align-self: end; min-height: 43px; }
 .voice-reference-panel { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 16px; padding: 16px; border: 1px solid #d8e1ff; border-radius: 10px; background: var(--blue-soft); }
 .voice-reference-panel input[type="file"] { padding: 9px; background: var(--surface); }
 .voice-reference-panel audio { margin: 10px 0 6px; }
 .voice-reference-panel button { margin-top: 9px; }
+.batch-input-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; }
+.batch-input-heading label { margin: 0; }
 .compact-empty { min-height: 300px; margin-top: 12px; padding: 28px; border: 1px dashed #ffc1d3; border-radius: 10px; background: var(--brand-soft); color: var(--text-secondary); text-align: center; place-content: center; gap: 8px; }
 .compact-empty:not([hidden]) { display: grid; }
 .compact-empty strong { color: var(--brand-text); }
@@ -291,7 +294,7 @@ dialog::backdrop { background: rgba(15, 23, 42, 0.35); }
 
 @media (max-width: 760px) {
   .app-shell { width: calc(100% - 24px); padding-top: 18px; }
-  .hero, .section-title-row, .page-intro, .generation-topline, .timeline-toolbar { align-items: stretch; flex-direction: column; }
+  .hero, .section-title-row, .page-intro, .generation-topline, .timeline-toolbar, .batch-input-heading { align-items: stretch; flex-direction: column; }
   .hero-copy { text-align: left; }
   .launcher-grid, .form-grid, .reference-panel, .voice-reference-panel, .import-toolbar, .defaults-bar { grid-template-columns: 1fr; }
   .launcher-advanced > summary { align-items: flex-start; flex-direction: column; gap: 3px; }

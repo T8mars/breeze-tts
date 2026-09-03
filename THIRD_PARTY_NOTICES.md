@@ -23,3 +23,9 @@ Detailed file-level attribution is included in `comfyui-breeze-tts-T8/THIRD_PART
 ## Bundled runtimes
 
 The Windows portable artifact includes CPython under the Python Software Foundation License and Electron/Chromium plus Python packages under their respective licenses. Their license files and package metadata remain inside the bundled runtime/application. `requirements-desktop.lock.txt` records exact Python package versions.
+
+The package also includes `faster-whisper` 1.2.1 and the
+`Systran/faster-whisper-small` converted checkpoint. Both report the MIT
+license. `WHISPER_NOTICE.md` records the pinned model revision and source URL,
+and distinguishes the bundled Small model from optional models downloaded on
+first use.

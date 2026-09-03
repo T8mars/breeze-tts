@@ -257,11 +257,11 @@ function installWhisperComponent() {
   if (!fs.existsSync(requirements)) {
     return Promise.reject(new Error("安装清单 requirements-whisper.txt 不存在，请重新下载完整整合包。"));
   }
-  appendLog("开始联网安装可选 Whisper 组件。");
+  appendLog("开始联网修复内置 Whisper 组件。");
   whisperInstallerPromise = new Promise((resolve, reject) => {
     const child = spawn(
       pythonExecutable(),
-      ["-m", "pip", "install", "--disable-pip-version-check", "-r", requirements],
+      ["-m", "pip", "install", "--break-system-packages", "--disable-pip-version-check", "-r", requirements],
       {
         cwd: root,
         env: { ...process.env, PYTHONUTF8: "1", PYTHONUNBUFFERED: "1" },

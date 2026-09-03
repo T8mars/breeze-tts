@@ -8,6 +8,7 @@ const root = path.resolve(__dirname, "..");
 const renderer = fs.readFileSync(path.join(root, "src", "renderer.js"), "utf8");
 const html = fs.readFileSync(path.join(root, "src", "index.html"), "utf8");
 const css = fs.readFileSync(path.join(root, "src", "styles.css"), "utf8");
+const main = fs.readFileSync(path.join(root, "src", "main.js"), "utf8");
 
 function sourceBetween(source, start, end) {
   const from = source.indexOf(start);
@@ -32,9 +33,10 @@ test("dialogue projects have an automatic draft and leave guard", () => {
 
 test("role syntax is detected for colon, bracket and pipe formats", () => {
   const roleSource = sourceBetween(renderer, "function normalizeRoleName", "function shouldShowRoleMappings");
-  const context = {};
+  const context = { INLINE_VOCAL_EVENT_ROLES: new Set(["笑", "咳嗽", "清嗓子", "叹气"]) };
   vm.runInNewContext(`${roleSource}; this.detect = detectRoleNames;`, context);
   assert.deepEqual(Array.from(context.detect("旁白：开始\n[小蓝] 你好\nAlice | Hello | en | cheerful")), ["旁白", "小蓝", "Alice"]);
+  assert.deepEqual(Array.from(context.detect("[笑] 这仍是普通台词\n[叹气] 第二句")), []);
   assert.match(renderer, /row\.className = "role-mapping-row"/);
   assert.match(renderer, /matchedVoice/);
   assert.match(renderer, /roleMappingPanel"\)\.addEventListener\("change"/);
@@ -168,7 +170,7 @@ test("launch, voice library, history and diagnostics expose actionable states", 
 });
 
 test("voice library owns its reference-audio upload, transcript and playback flow", () => {
-  for (const id of ["voiceMode", "voiceInstruction", "voiceReferenceAudio", "voiceReferenceText", "voiceReferencePreview", "voiceTranscribeButton", "voiceClearReferenceButton"]) {
+  for (const id of ["newVoiceButton", "voiceMode", "voiceInstruction", "voiceReferenceAudio", "voiceReferenceText", "voiceReferencePreview", "voiceTranscribeButton", "voiceClearReferenceButton"]) {
     assert.ok(html.includes(`id="${id}"`), `missing voice-library control: ${id}`);
   }
   const selectSource = sourceBetween(renderer, "function selectLibraryVoice", "function applyLibraryVoiceToGeneration");
@@ -179,7 +181,28 @@ test("voice library owns its reference-audio upload, transcript and playback flo
   assert.match(createSource, /\$\("voiceReferenceAudio"\)\.files\[0\]/);
   assert.match(createSource, /\$\("voiceReferenceText"\)\.value\.trim\(\)/);
   assert.match(updateSource, /clear_reference: state\.voiceClearReference/);
+  assert.match(renderer, /function beginNewVoice/);
+  assert.match(renderer, /beginNewVoice\(`已删除音色/);
+  assert.match(html, /id="saveVoiceButton"[^>]*>保存为新音色</);
   assert.match(css, /\.voice-reference-panel\s*\{[^}]*grid-template-columns/);
+});
+
+test("batch editor ships runnable examples and does not mistake vocal events for roles", () => {
+  assert.match(html, /id="loadBatchExampleButton"/);
+  assert.match(html, /id="clearBatchInputButton"/);
+  assert.match(html, /This is a real English batch example/);
+  assert.match(renderer, /const BATCH_EXAMPLES = \{/);
+  assert.match(renderer, /function loadBatchExample/);
+  assert.match(renderer, /function clearBatchInput/);
+  assert.match(renderer, /INLINE_VOCAL_EVENT_ROLES/);
+  assert.match(renderer, /if \(bracket\) return !INLINE_VOCAL_EVENT_ROLES\.has/);
+});
+
+test("Whisper small is a bundled default and repair handles the managed runtime", () => {
+  assert.match(html, /Whisper small（整合包内置）/);
+  assert.match(renderer, /whisper_small_bundled/);
+  assert.match(renderer, /整合包内置 Whisper small/);
+  assert.match(main, /"--break-system-packages"/);
 });
 
 test("timeline controls have per-line accessible names and touch-sized handles", () => {

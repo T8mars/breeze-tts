@@ -1,7 +1,7 @@
 {
   "name": "t8star-aix-voice-studio",
   "productName": "T8star-Aix Voice Studio",
-  "version": "0.2.7",
+  "version": "0.2.8",
   "description": "Unofficial Windows desktop integration for Breeze TTS 2",
   "main": "src/main.js",
   "author": "T8star-Aix",

@@ -43,7 +43,7 @@ from .runtime_manager import DEFAULT_INSTRUCTION, GenerationRequest, RuntimeMana
 from .dialogue import apply_timeline_edit, new_project, normalize_project, parse_dialogue, to_srt
 from .script_tools import parse_multi_role_script, parse_srt
 from .settings_store import load_settings, update_settings
-from .transcription import transcribe_audio, whisper_available
+from .transcription import bundled_whisper_small_available, transcribe_audio, whisper_available
 from .workspace_store import (
     ProjectRevisionConflict,
     QueueRevisionConflict,
@@ -541,6 +541,7 @@ def create_app(model_dir: Path | None = None) -> FastAPI:
             "voice_library": True,
             "srt": True,
             "whisper": whisper_available(),
+            "whisper_small_bundled": bundled_whisper_small_available(),
             "fast_24gb": True,
             "editable_timeline": True,
             "per_line_direction": True,
