@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.5 — 2026-09-03
+
+- Adds four real ComfyUI frontend workflows with top-level `nodes`, `links`, canvas positions, groups, widgets, preview, and save nodes.
+- Keeps the existing `*_api.json` prompt examples, while clearly separating them from drag-and-drop `*_workflow.json` files.
+- Adds automated graph/link validation so API-only examples cannot be mistaken for UI workflows again.
+- Labels the license, reference-audio, transcript, and `.t8voice.zip` steps directly on the canvas.
+- Serializes the current ComfyUI AUDIO outputs on both PreviewAudio and SaveAudio, and documents the expected missing-reference prompt.
+
 ## 0.2.4 — 2026-09-03
 
 - Aligns the node bundle with Voice Studio 0.2.4 and its reliable per-line rerun, backfill, and automatic timeline remix workflow.

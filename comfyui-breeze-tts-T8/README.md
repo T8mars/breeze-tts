@@ -1,6 +1,6 @@
 # comfyui-breeze-tts-T8
 
-非官方 Breeze TTS 2 ComfyUI 配套节点。v0.2.4 提供 8 个可组合节点：模型加载、声音设计、声音克隆、声音导演、桌面音色包、逐句情感、生成设置和音频生成。
+非官方 Breeze TTS 2 ComfyUI 配套节点。v0.2.5 提供 8 个可组合节点，并补齐可直接拖入 ComfyUI 画布的前端工作流：模型加载、声音设计、声音克隆、声音导演、桌面音色包、逐句情感、生成设置和音频生成。
 
 ## 安装
 
@@ -33,7 +33,7 @@ python -m pip install -r comfyui-breeze-tts-T8/requirements.txt
 
 - Python：`>=3.10,<3.13`
 - Transformers：`>=4.57,<6`
-- 已验证目标：Transformers 4.57.3 与 5.16.1；ComfyUI 0.33.0 API 工作流
+- 已验证目标：Transformers 4.57.3 与 5.16.1；ComfyUI 0.34.0 / 前端 1.51.9 的画布工作流
 - Torch：沿用 ComfyUI 自己的版本；GPU 推理建议支持 BF16
 
 节点内置了 T5Gemma2 与 Qwen3 TTS codec 的跨版本兼容实现。4.57.x 使用随节点提供的 T5Gemma2 兼容层，5.x 优先使用 Transformers 自带实现；因版本变化产生的 causal-mask、StaticCache 和 RoPE 接口差异在节点内部适配。版本不在支持范围时会在节点注册阶段直接报告原因，不会静默覆盖宿主环境。
@@ -62,7 +62,23 @@ Request 和 Settings 会在模型恢复到 GPU 之前验证。空台词、空逐
 3. `T8 生成设置`
 4. `T8 生成音频`
 
-`examples/` 提供 Design、Clone、Direction 和桌面音色包四份 API 工作流。导入前请把模型加载器的 `accept_model_license` 改为 `true`；Clone/Direction 还需替换 `reference.wav` 与准确逐字稿。
+## 工作流示例
+
+`examples/` 同时提供两类 JSON，格式不同，不能混用：
+
+- `*_workflow.json`：**ComfyUI 前端工作流**。直接把文件拖进 ComfyUI 画布，或使用“工作流 → 打开”导入。
+- `*_api.json`：仅供 `/prompt` HTTP API 或脚本调用，不能拖入画布。
+
+可直接导入的四份前端工作流：
+
+- `voice_design_workflow.json`：声音设计；
+- `voice_clone_workflow.json`：声音克隆；
+- `voice_direction_workflow.json`：参考音色加情绪/语速导演；
+- `voice_bundle_workflow.json`：读取桌面版导出的 `.t8voice.zip` 音色包。
+
+导入后先在粉色分组中的 `① 模型加载器` 阅读许可证并勾选 `accept_model_license`。Clone/Direction 工作流还必须在 `LoadAudio` 中重新选择自己的参考音频，并填写准确逐字稿；示例不会内嵌 `reference.wav`。因此首次打开这两份工作流时，ComfyUI 会提示“缺少媒体输入 reference.wav”，这是等待用户选择参考音频的正常提示，不是节点缺失。关闭提示，在 `LoadAudio` 中点击“选择文件上传”即可。Voice Bundle 工作流需把示例路径改成真实的 `.t8voice.zip` 绝对路径。
+
+如果导入后节点显示红色“缺失”，请确认节点目录是 `ComfyUI/custom_nodes/comfyui-breeze-tts-T8`，重启 ComfyUI 后再导入 `*_workflow.json`，不要导入同名的 `*_api.json`。
 
 ## 桌面音色包与逐句情感
 
@@ -90,4 +106,4 @@ Request 和 Settings 会在模型恢复到 GPU 之前验证。空台词、空逐
 - GitHub：<https://github.com/T8mars/Comfyui-breeze-tts>
 - Comfy Registry Publisher：`t8star`
 - Registry 节点 ID：`comfyui-breeze-tts-T8`
-- 当前版本：`0.2.4`
+- 当前版本：`0.2.5`

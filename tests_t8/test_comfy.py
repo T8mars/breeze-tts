@@ -73,8 +73,8 @@ def _write_voice_bundle(path: Path, *, payload: bytes | None = None, digest: str
 def test_comfy_package_registers_eight_nodes():
     package_dir = ROOT / "comfyui-breeze-tts-T8"
     module = _load_package("comfyui_breeze_tts_T8_test")
-    assert module.__version__ == "0.2.4"
-    assert 'version = "0.2.4"' in (package_dir / "pyproject.toml").read_text(encoding="utf-8")
+    assert module.__version__ == "0.2.5"
+    assert 'version = "0.2.5"' in (package_dir / "pyproject.toml").read_text(encoding="utf-8")
     assert len(module.NODE_CLASS_MAPPINGS) == 8
     assert set(module.NODE_CLASS_MAPPINGS) == {
         "T8_BreezeTTS_ModelLoader",
@@ -155,6 +155,68 @@ def test_comfy_package_registers_eight_nodes():
     assert random.getstate() == py_state
     assert np.array_equal(np.random.get_state()[1], np_state[1])
     assert torch.equal(torch.get_rng_state(), torch_state)
+
+
+@pytest.mark.comfy
+def test_comfy_ships_frontend_loadable_workflows():
+    package_dir = ROOT / "comfyui-breeze-tts-T8"
+    module = _load_package("comfyui_breeze_tts_T8_ui_workflows")
+    workflows = {
+        path.name: json.loads(path.read_text(encoding="utf-8"))
+        for path in (package_dir / "examples").glob("*_workflow.json")
+    }
+    assert set(workflows) == {
+        "voice_design_workflow.json",
+        "voice_clone_workflow.json",
+        "voice_direction_workflow.json",
+        "voice_bundle_workflow.json",
+    }
+
+    builtin_types = {"LoadAudio", "PreviewAudio", "SaveAudio"}
+    for filename, workflow in workflows.items():
+        assert workflow["version"] == 0.4
+        assert workflow["extra"]["t8_example_kind"] == "ui_workflow"
+        assert workflow["extra"]["t8_node_version"] == module.__version__
+        assert isinstance(workflow["nodes"], list) and workflow["nodes"]
+        assert isinstance(workflow["links"], list) and workflow["links"]
+        assert workflow["last_node_id"] == max(node["id"] for node in workflow["nodes"])
+        assert workflow["last_link_id"] == max(link[0] for link in workflow["links"])
+
+        nodes = {node["id"]: node for node in workflow["nodes"]}
+        assert len(nodes) == len(workflow["nodes"])
+        node_types = {node["type"] for node in nodes.values()}
+        assert node_types <= set(module.NODE_CLASS_MAPPINGS) | builtin_types
+        assert {"T8_BreezeTTS_ModelLoader", "T8_BreezeTTS_Generate", "PreviewAudio", "SaveAudio"} <= node_types
+
+        loader_node = next(node for node in nodes.values() if node["type"] == "T8_BreezeTTS_ModelLoader")
+        assert loader_node["widgets_values"][-1] is False
+        assert "许可证" in loader_node["title"]
+        for core_type in ("PreviewAudio", "SaveAudio"):
+            core_node = next(node for node in nodes.values() if node["type"] == core_type)
+            assert core_node["outputs"] == [
+                {"name": "audio", "type": "AUDIO", "links": None, "slot_index": 0}
+            ]
+
+        seen_link_ids = set()
+        for link_id, origin_id, origin_slot, target_id, target_slot, data_type in workflow["links"]:
+            assert link_id not in seen_link_ids
+            seen_link_ids.add(link_id)
+            assert origin_id in nodes and target_id in nodes
+            origin = nodes[origin_id]
+            target = nodes[target_id]
+            assert origin["outputs"][origin_slot]["type"] == data_type
+            assert link_id in origin["outputs"][origin_slot]["links"]
+            assert target["inputs"][target_slot]["type"] == data_type
+            assert target["inputs"][target_slot]["link"] == link_id
+
+        # API prompt examples remain separate; users must not be told to drag
+        # those API-only dictionaries into the frontend canvas.
+        api_name = filename.replace("_workflow.json", "_api.json")
+        api_prompt = json.loads((package_dir / "examples" / api_name).read_text(encoding="utf-8"))
+        assert "nodes" not in api_prompt and "links" not in api_prompt
+
+    generator = (package_dir / "scripts" / "generate_ui_workflows.py").read_text(encoding="utf-8")
+    assert f'PACKAGE_VERSION = "{module.__version__}"' in generator
 
 
 @pytest.mark.comfy
