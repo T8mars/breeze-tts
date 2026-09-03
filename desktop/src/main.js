@@ -595,7 +595,7 @@ async function createWindow() {
     }
   });
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https:\/\/(github\.com|huggingface\.co|breeze\.blue)\//i.test(url)) {
+    if (/^https:\/\/(github\.com|huggingface\.co|breeze\.blue|space\.bilibili\.com|www\.youtube\.com)\//i.test(url)) {
       shell.openExternal(url);
     }
     return { action: "deny" };
@@ -679,7 +679,7 @@ ipcMain.handle("open-path", async (_event, target) => {
 });
 
 ipcMain.handle("open-external", async (_event, url) => {
-  if (!/^https:\/\/(github\.com|huggingface\.co|breeze\.blue)\//i.test(String(url))) {
+  if (!/^https:\/\/(github\.com|huggingface\.co|breeze\.blue|space\.bilibili\.com|www\.youtube\.com)\//i.test(String(url))) {
     throw new Error("外链不在允许列表中。");
   }
   await shell.openExternal(url);

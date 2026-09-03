@@ -169,6 +169,14 @@ test("launch, voice library, history and diagnostics expose actionable states", 
   assert.match(html, /id="copyDiagnosticsButton"/);
 });
 
+test("launcher separates official links from T8star-Aix social links", () => {
+  for (const url of ["https://github.com/T8mars", "https://huggingface.co/t8star", "https://space.bilibili.com/385085361", "https://www.youtube.com/@T8star-Aix/"]) {
+    assert.ok(html.includes(`data-url="${url}"`), `missing creator link: ${url}`);
+  }
+  assert.match(html, /reference-links-label">官方项目/);
+  assert.match(html, /reference-links-label">T8star-Aix/);
+});
+
 test("voice library owns its reference-audio upload, transcript and playback flow", () => {
   for (const id of ["newVoiceButton", "voiceMode", "voiceInstruction", "voiceReferenceAudio", "voiceReferenceText", "voiceReferencePreview", "voiceTranscribeButton", "voiceClearReferenceButton"]) {
     assert.ok(html.includes(`id="${id}"`), `missing voice-library control: ${id}`);

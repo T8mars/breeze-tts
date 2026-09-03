@@ -127,7 +127,10 @@ progress { width: 100%; height: 8px; margin-top: 14px; accent-color: var(--brand
 .diagnostic, .capability { padding: 8px 10px; border-radius: 7px; background: var(--surface-soft); color: var(--text-secondary); font-size: 0.8rem; }
 .diagnostic.ok, .capability.ok { color: var(--success); background: #effaf5; }
 .diagnostic.error { color: var(--danger); background: #fff3f6; }
-.reference-links { display: flex; justify-content: center; gap: 14px; margin-top: 16px; }
+.reference-link-groups { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px 24px; margin-top: 16px; }
+.reference-links { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; }
+.reference-links-label { color: var(--text-secondary); font-size: 0.78rem; font-weight: 800; }
+.creator-links { padding-left: 18px; border-left: 1px solid var(--border); }
 
 .studio-view { padding-bottom: 92px; }
 .studio-toolbar { position: sticky; top: 0; z-index: 20; display: grid; grid-template-columns: minmax(190px, 1fr) minmax(160px, 0.8fr) auto; gap: 10px; padding: 10px; border: 1px solid #d8e1ff; border-radius: 12px; background: rgba(238, 243, 255, 0.94); backdrop-filter: blur(12px); }
@@ -299,6 +302,7 @@ dialog::backdrop { background: rgba(15, 23, 42, 0.35); }
   .hero-copy { text-align: left; }
   .launcher-grid, .form-grid, .reference-panel, .voice-reference-panel, .import-toolbar, .defaults-bar, .default-role-picker { grid-template-columns: 1fr; }
   .launcher-advanced > summary { align-items: flex-start; flex-direction: column; gap: 3px; }
+  .creator-links { padding-left: 0; border-left: 0; }
   .studio-toolbar { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) auto; top: 0; gap: 8px; overflow: visible; padding: 8px; }
   .studio-toolbar > button { min-width: 0; min-height: 40px; padding-inline: 9px; white-space: normal; }
   .studio-toolbar .toolbar-status { display: block; }

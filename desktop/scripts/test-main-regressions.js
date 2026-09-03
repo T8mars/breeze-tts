@@ -182,6 +182,7 @@ assert(["restore", "show", "moveTop", "focus"].every((item) => windowCalls.inclu
 assert(source.includes('child.on("exit"') && source.includes("backendErrorDialogShown"), "backend exit de-duplication guard missing");
 assert(fs.existsSync(faviconPath), "favicon asset missing");
 assert(fs.readFileSync(indexPath, "utf8").includes('rel="icon" href="favicon.svg"'), "favicon is not linked from index.html");
+assert(source.includes("space\\.bilibili\\.com") && source.includes("www\\.youtube\\.com"), "creator social domains are missing from the external-link allowlist");
 
 const childStdout = mockConsoleStream([]);
 const childStderr = mockConsoleStream([]);
