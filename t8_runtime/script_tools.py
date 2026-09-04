@@ -5,6 +5,9 @@ from dataclasses import asdict, dataclass
 
 
 _ROLE_LINE = re.compile(r"^\s*(?:\[([^\]]+)\]|([^：:]{1,40})[：:])\s*(.+?)\s*$")
+_INLINE_VOCAL_EVENT_ROLES = frozenset(
+    {"笑", "笑声", "咳嗽", "清嗓子", "叹气", "叹息", "抽泣", "哭", "喘息", "呼气"}
+)
 _SRT_TIME = re.compile(
     r"^(\d{1,2}):(\d{2}):(\d{2})[,.](\d{3})\s*-->\s*"
     r"(\d{1,2}):(\d{2}):(\d{2})[,.](\d{3})$"
@@ -56,6 +59,8 @@ def parse_multi_role_script(text: str, default_role: str = "旁白") -> list[dic
         if not line:
             continue
         match = _ROLE_LINE.match(line)
+        if match and match.group(1) and match.group(1).strip().casefold() in _INLINE_VOCAL_EVENT_ROLES:
+            match = None
         if match:
             active_role = (match.group(1) or match.group(2) or default_role).strip()
             content = match.group(3).strip()

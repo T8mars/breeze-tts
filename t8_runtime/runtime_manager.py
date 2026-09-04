@@ -139,6 +139,7 @@ class RuntimeManager:
         self._flash_attention_fallback_reason = None
         self._max_new_tokens = None
         self._loaded_at = None
+        self._device_report = None
 
     @property
     def loaded(self) -> bool:
@@ -147,6 +148,7 @@ class RuntimeManager:
     def status(self) -> dict:
         fast_package = fast_all_package_status()
         flash_package = flash_attention_package_status()
+        compute_device = self._compute_device_status()
         return {
             "loaded": self.loaded,
             "generating": self._generation_lock.locked(),
@@ -166,7 +168,111 @@ class RuntimeManager:
             "max_new_tokens": self._max_new_tokens,
             "loaded_at": self._loaded_at,
             "sample_rate": getattr(self._runtime, "sample_rate", SAMPLE_RATE),
+            "device": compute_device.get("device") if compute_device else None,
+            "device_verified": bool(compute_device and compute_device.get("verified")),
+            "gpu_name": compute_device.get("gpu_name") if compute_device else None,
+            "compute_device": compute_device,
         }
+
+    @staticmethod
+    def _parameter_devices(module) -> set:
+        try:
+            return {parameter.device for parameter in module.parameters()}
+        except (AttributeError, TypeError):
+            return set()
+
+    @staticmethod
+    def _canonical_cuda_device(device, torch) -> str:
+        resolved = torch.device(device)
+        if resolved.type != "cuda":
+            return str(resolved)
+        index = torch.cuda.current_device() if resolved.index is None else resolved.index
+        return f"cuda:{index}"
+
+    def _verify_cuda_runtime(self, runtime, model, audio_tokenizer) -> dict:
+        import torch
+
+        runtime_device = torch.device(getattr(runtime, "device", "cpu"))
+        model_devices = self._parameter_devices(model)
+        audio_model = getattr(audio_tokenizer, "model", audio_tokenizer)
+        audio_devices = self._parameter_devices(audio_model)
+        component_devices = {
+            "streaming_runtime": {runtime_device},
+            "breeze_model": model_devices,
+            "audio_codec": audio_devices,
+        }
+        invalid = {
+            name: sorted(str(device) for device in devices) or ["unknown"]
+            for name, devices in component_devices.items()
+            if not devices or any(torch.device(device).type != "cuda" for device in devices)
+        }
+        canonical = {
+            name: {self._canonical_cuda_device(device, torch) for device in devices}
+            for name, devices in component_devices.items()
+            if devices
+        }
+        unique_devices = set().union(*canonical.values()) if canonical else set()
+        if invalid or len(unique_devices) != 1:
+            details = "; ".join(
+                f"{name}={','.join(sorted(values))}"
+                for name, values in canonical.items()
+            )
+            if invalid:
+                details = f"{details}; 非 CUDA: {invalid}" if details else f"非 CUDA: {invalid}"
+            raise RuntimeError(
+                "CUDA 设备校验失败，已阻止 CPU 静默生成。"
+                f"请更新 NVIDIA 驱动并重新启动应用。{details}"
+            )
+        device = unique_devices.pop()
+        device_object = torch.device(device)
+        torch.cuda.synchronize(device_object)
+        report = {
+            "backend": "CUDA",
+            "verified": True,
+            "device": device,
+            "gpu_name": torch.cuda.get_device_name(device_object),
+            "streaming_runtime_device": device,
+            "model_devices": sorted(canonical["breeze_model"]),
+            "audio_codec_devices": sorted(canonical["audio_codec"]),
+        }
+        LOGGER.info(
+            "CUDA inference path verified: device=%s gpu=%s model=%s audio_codec=%s",
+            report["device"],
+            report["gpu_name"],
+            report["model_devices"],
+            report["audio_codec_devices"],
+        )
+        return report
+
+    def _compute_device_status(self) -> dict | None:
+        if not self._device_report:
+            return None
+        report = dict(self._device_report)
+        try:
+            import torch
+
+            device = torch.device(report["device"])
+            report.update(
+                {
+                    "cuda_memory_allocated_bytes": int(torch.cuda.memory_allocated(device)),
+                    "cuda_memory_reserved_bytes": int(torch.cuda.memory_reserved(device)),
+                    "cuda_peak_memory_allocated_bytes": int(torch.cuda.max_memory_allocated(device)),
+                    "cuda_peak_memory_reserved_bytes": int(torch.cuda.max_memory_reserved(device)),
+                }
+            )
+        except (KeyError, RuntimeError, TypeError, ValueError):
+            LOGGER.debug("Unable to read CUDA memory counters", exc_info=True)
+        return report
+
+    def _reset_cuda_peak_memory_stats(self) -> None:
+        if not self._device_report:
+            return
+        try:
+            import torch
+
+            torch.cuda.reset_peak_memory_stats(torch.device(self._device_report["device"]))
+        except (KeyError, RuntimeError, TypeError, ValueError):
+            LOGGER.debug("Unable to reset CUDA peak-memory counters", exc_info=True)
 
     @staticmethod
     def _raise_if_cancelled(cancel_event: threading.Event | None) -> None:
@@ -322,6 +428,7 @@ class RuntimeManager:
                         text_encoder_attention = "flash_attention_2"
                         flash_fallback_reason = None
                     runtime = FastBreezeStreamingRuntime(model, audio_tokenizer, config, tokenizer=tokenizer)
+            device_report = self._verify_cuda_runtime(runtime, model, audio_tokenizer)
             self._tokenizer = tokenizer
             self._model = model
             self._audio_tokenizer = audio_tokenizer
@@ -333,6 +440,7 @@ class RuntimeManager:
             self._flash_attention_fallback_reason = flash_fallback_reason
             self._max_new_tokens = max_new_tokens
             self._loaded_at = time.time()
+            self._device_report = device_report
             if torch.cuda.is_available():
                 torch.cuda.synchronize()
 
@@ -348,6 +456,7 @@ class RuntimeManager:
         self._flash_attention_fallback_reason = None
         self._max_new_tokens = None
         self._loaded_at = None
+        self._device_report = None
         try:
             import gc
             import torch
@@ -411,6 +520,7 @@ class RuntimeManager:
             audio_tokenizer = self._audio_tokenizer
             if runtime is None or tokenizer is None or model is None or audio_tokenizer is None:
                 raise RuntimeError("模型运行时未正确加载。")
+            self._reset_cuda_peak_memory_stats()
             segments = split_text_for_model(request.text, tokenizer)
             if not segments:
                 raise ValueError("目标文本不能为空。")
@@ -565,6 +675,7 @@ class RuntimeManager:
                 "spoken_text": request.text,
                 "pronunciation_replacements": list(request.pronunciation_replacements),
                 "audio_effect": effect,
+                "compute_device": self._compute_device_status(),
             }
             output_path.with_suffix(".json").write_text(
                 json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8"

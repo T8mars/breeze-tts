@@ -182,6 +182,20 @@ progress { width: 100%; height: 8px; margin-top: 14px; accent-color: var(--brand
 .preset-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
 .preset-buttons button { min-height: 34px; padding: 6px 10px; border-color: #ffd2df; background: var(--surface); color: var(--text-secondary); font-size: 0.78rem; }
 .preset-buttons button:hover, .preset-buttons button.active { border-color: #f45f8b; background: var(--brand-soft); color: var(--brand-text); }
+.event-preset-group { grid-column: 1 / -1; }
+.event-preset-intro { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.event-preset-legend { display: flex; flex: 0 0 auto; gap: 6px; }
+.preset-confidence { display: inline-flex; align-items: center; min-height: 24px; padding: 3px 8px; border-radius: 999px; font-size: 0.68rem; font-weight: 800; }
+.preset-confidence.official { color: #17663d; background: #e8f8ef; }
+.preset-confidence.experimental { color: #8a5a00; background: #fff5d8; }
+.event-category-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.event-category { min-width: 0; padding: 9px; border: 1px solid #edf0f7; border-radius: 8px; background: var(--surface-soft); }
+.event-category h4 { margin: 0 0 8px; color: var(--text-secondary); font-size: 0.75rem; }
+.preset-buttons button.event-preset { display: inline-grid; grid-template-columns: auto auto; align-items: center; gap: 5px; }
+.event-preset small { color: var(--muted); font: 0.67rem/1.2 ui-monospace, Consolas, monospace; }
+.event-preset.experimental { border-style: dashed; border-color: #e4c673; }
+.experimental-event-presets { margin-top: 9px; border-top: 1px solid var(--border); padding-top: 9px; }
+.experimental-event-presets > summary { margin-bottom: 9px; color: #7b5900; font-size: 0.76rem; font-weight: 750; cursor: pointer; }
 .preset-status { margin: 10px 0 0; color: var(--text-secondary); font-size: 0.8rem; }
 .generation-delivery { grid-column: 1 / -1; }
 .generation-stream-option { margin: 0; padding: 12px 14px; border: 1px solid #d8e1ff; border-radius: 9px; background: var(--blue-soft); cursor: pointer; }
@@ -326,6 +340,7 @@ dialog::backdrop { background: rgba(15, 23, 42, 0.35); }
   .settings-diagnostics { grid-column: auto; }
   .history-toolbar { grid-template-columns: 1fr 180px; }
   .history-toolbar .hint { grid-column: 1 / -1; text-align: left; }
+  .event-category-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 760px) {
@@ -345,6 +360,8 @@ dialog::backdrop { background: rgba(15, 23, 42, 0.35); }
   .mode-tab { min-width: 0; padding-inline: 7px; }
   .recipe-controls { grid-template-columns: 1fr 1fr; }
   .preset-groups { grid-template-columns: 1fr; }
+  .event-preset-intro { flex-direction: column; }
+  .event-category-grid { grid-template-columns: 1fr; }
   .quick-launch-feedback { grid-template-columns: 1fr; }
   .timeline-toolbar .row-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .timeline-toolbar .row-actions button { width: 100%; }

@@ -165,7 +165,9 @@ const AUDIO_EFFECT_DESCRIPTIONS = {
   bright: "质感效果：增强清晰感和高频轮廓。", muffled: "质感效果：明显削弱高频，模拟隔墙听见。", dream: "创意效果：柔和高频并叠加多层短回声。",
   robot: "创意效果：加入周期性机械调制。"
 };
-const INLINE_VOCAL_EVENT_ROLES = new Set(["笑", "咳嗽", "清嗓子", "叹气"]);
+const INLINE_VOCAL_EVENT_ROLES = new Set([
+  "笑", "笑声", "咳嗽", "清嗓子", "叹气", "叹息", "抽泣", "哭", "喘息", "呼气"
+]);
 const BATCH_EXAMPLES = {
   items: "欢迎使用 Breeze TTS 2，这是普通批量的第一句示例。\n第二句可以继续编辑，解析后会进入可调整的时间轴。\nThis is a real English batch example.",
   script: "旁白：夜色渐深，故事从这里开始。\n小雨：[笑] 你终于来了！\n阿诚：(sigh) 对不起，让你久等了。",
@@ -413,7 +415,11 @@ function applyCreativePreset(button) {
   const value = button.dataset.presetValue;
   if (kind === "event") {
     insertAtCursor($("targetText"), value);
-    setActionMessage("creativePresetStatus", `已在光标处写入声音事件 ${value}；它会由 Breeze 模型直接演绎。`, "success");
+    const experimental = button.dataset.presetConfidence === "experimental";
+    const note = experimental
+      ? "这是实验写法，实际触发效果可能随台词、CFG 与 Seed 变化。"
+      : "这是 Breeze 官方示例写法，会由模型直接演绎。";
+    setActionMessage("creativePresetStatus", `已在光标处写入声音事件 ${value}；${note}`, experimental ? "info" : "success");
     return;
   }
   if (kind === "effect") {
@@ -608,6 +614,7 @@ function rememberActiveModel(report, runtime = null) {
 function renderDiagnostics(data) {
   state.diagnostics = data;
   const gpu = data.gpu?.devices?.[0];
+  const computeDevice = data.runtime?.compute_device;
   const packages = data.packages || {};
   const tritonVersion = packages["triton-windows"];
   const flashVersion = packages["flash-attn"];
@@ -642,6 +649,11 @@ function renderDiagnostics(data) {
     ["Qwen TTS", packages["qwen-tts"] || "缺失", packages["qwen-tts"] === "0.1.1"],
     ["FlashAttention 2", flashVersion ? `${flashVersion} · ${flashActive ? "文本编码器已启用" : flashReady ? "标准模式可用" : "需要 NVIDIA CUDA GPU"}` : "缺失 · 文本编码器将使用 Eager", flashReady],
     ["Fast All / Triton", tritonVersion ? `${tritonVersion} · ${fastAllReady ? "可用" : "条件未满足"}` : "缺失 · 将使用 Eager", fastAllReady],
+    ["实际推理设备", data.runtime.loaded
+      ? computeDevice?.verified
+        ? `${computeDevice.backend} 已验证 · ${computeDevice.gpu_name} · ${computeDevice.device} · ${formatBytes(computeDevice.cuda_memory_allocated_bytes || 0)} 已分配`
+        : "未通过 CUDA 路径校验"
+      : "加载模型后自动校验主模型与音频 Codec", !data.runtime.loaded || computeDevice?.verified],
     ["模型运行时", data.runtime.loaded ? "已加载" : "按需加载", true]
   ];
   const cards = () => entries.map(([name, value, ready]) => {
@@ -655,7 +667,9 @@ function renderDiagnostics(data) {
   $("diagnosticsGrid")?.replaceChildren(...cards());
   $("settingsDiagnosticsGrid")?.replaceChildren(...cards());
   if ($("settingsDiagnosticStatus")) {
-    const runtime = data.runtime?.loaded ? "模型已加载" : "模型未占用显存";
+    const runtime = data.runtime?.loaded
+      ? computeDevice?.verified ? `${computeDevice.device} CUDA 路径已验证` : "CUDA 路径未验证"
+      : "模型未占用显存";
     $("settingsDiagnosticStatus").textContent = `诊断已更新 · ${runtime} · ${new Date().toLocaleTimeString()}`;
   }
   $("buildMeta").textContent = `Desktop ${data.project_version} · Core ${data.core_revision.slice(0, 8)} · Model ${data.model_revision.slice(0, 8)}`;
@@ -2091,7 +2105,10 @@ async function launchStudio(templateId = "blank") {
     const attentionSummary = runtime.flash_attention_active
       ? "FlashAttention 2 文本编码器"
       : `${runtime.text_encoder_attention || "Eager"} 文本编码器`;
-    $("runtimeSummary").textContent = `${runtime.fast_all ? "Fast All" : "标准流式"} · ${attentionSummary} · 24 kHz · 模型已加载${runtime.fast_all_fallback_reason ? ` · ${runtime.fast_all_fallback_reason}` : ""}`;
+    const deviceSummary = runtime.device_verified
+      ? `${runtime.gpu_name} · ${runtime.device} CUDA 已验证`
+      : "CUDA 路径未验证";
+    $("runtimeSummary").textContent = `${runtime.fast_all ? "Fast All" : "标准流式"} · ${attentionSummary} · ${deviceSummary} · 24 kHz${runtime.fast_all_fallback_reason ? ` · ${runtime.fast_all_fallback_reason}` : ""}`;
     applyCreationTemplate(templateId);
     $("quickLaunchFeedback").hidden = true;
     window.scrollTo({ top: 0, behavior: "smooth" });

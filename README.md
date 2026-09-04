@@ -14,9 +14,9 @@
 > [!NOTE]
 > This workspace also contains the unofficial **T8star-Aix Voice Studio** Windows portable integration and the user-requested `comfyui-breeze-tts-T8` node package. See [`T8_DISTRIBUTION.md`](T8_DISTRIBUTION.md) and [`roadmap.md`](roadmap.md). These additions are not affiliated with or endorsed by BreezeBlue.
 
-### T8star-Aix Voice Studio 0.3.2
+### T8star-Aix Voice Studio 0.3.3
 
-The Windows integration uses an IndexTTS 2.5-inspired light launcher and functional workbench. Version 0.3.2 bundles a checksum-verified prebuilt FlashAttention 2.8.3 GitHub wheel for the compatible T5Gemma2 text encoder, with no local compilation; Breeze's custom streaming decoders keep their verified Eager path and Fast All keeps its SDPA CUDA Graph path. It also retains the bundled Whisper Large-v3 editable transcription drafts, high-visibility transcript warning, stable long-form Voice Design anchor, separate display/spoken text for rare-character pronunciation, categorized creative presets, per-line rerun, and automatic full-timeline remix.
+The Windows integration uses an IndexTTS 2.5-inspired light launcher and functional workbench. Version 0.3.3 adds a categorized vocal-event picker covering 8 official example spellings and 15 clearly marked experimental spellings, while keeping bracketed events intact in multi-role scripts. It now hard-verifies that the Breeze model, audio codec, and streaming runtime share one CUDA device before generation, and exposes the actual GPU/device plus CUDA memory counters in diagnostics and output metadata. It retains the checksum-verified prebuilt FlashAttention 2.8.3 runtime, bundled Whisper Large-v3 editable transcription drafts, high-visibility transcript warning, stable long-form Voice Design anchor, separate display/spoken text for rare-character pronunciation, categorized creative presets, per-line rerun, and automatic full-timeline remix.
 
 Whisper never cleans or changes the reference waveform. Its text is only a draft: play the reference audio and correct every word before confirming it. A wrong or incomplete transcript paired with the reference can lead to repetitions, dragged syllables, echo-like artifacts, or an unstable cloned voice.
 

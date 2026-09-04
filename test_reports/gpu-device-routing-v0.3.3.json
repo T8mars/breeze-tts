@@ -1,0 +1,40 @@
+{
+  "version": "0.3.3",
+  "tested_at": "2026-09-04T20:33:35+08:00",
+  "result": "passed",
+  "runtime_profile": "standard_streaming",
+  "text_encoder_attention": "flash_attention_2",
+  "torch": "2.9.1+cu128",
+  "gpu": "NVIDIA GeForce RTX 5090 Laptop GPU",
+  "device_verification": {
+    "backend": "CUDA",
+    "verified": true,
+    "device": "cuda:0",
+    "streaming_runtime_device": "cuda:0",
+    "model_devices": [
+      "cuda:0"
+    ],
+    "audio_codec_devices": [
+      "cuda:0"
+    ]
+  },
+  "cuda_memory": {
+    "allocated_bytes": 8060085760,
+    "reserved_bytes": 8149532672,
+    "peak_allocated_bytes": 8107378176,
+    "peak_reserved_bytes": 8149532672
+  },
+  "live_sampling": {
+    "tool": "nvidia-smi dmon",
+    "sustained_gpu_sm_percent": "56-67",
+    "peak_framebuffer_memory_mib": 8182,
+    "inference_process_cpu_core_equivalents": "approximately 1.0"
+  },
+  "output": "outputs/breeze_design_20260904_203315_e22bf295.wav",
+  "notes": [
+    "The updated RuntimeManager completed a real generated WAV after verifying every inference component uses the same CUDA device.",
+    "The CUDA SM remained active throughout autoregressive generation and framebuffer usage returned to baseline after process exit.",
+    "CPU activity was limited to roughly one logical core for token-loop orchestration and audio I/O; it was not a CPU inference fallback.",
+    "Generation metadata contains the verified device report and current/peak CUDA memory counters."
+  ]
+}

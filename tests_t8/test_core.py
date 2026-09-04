@@ -227,6 +227,32 @@ def test_flash_attention_package_status_reports_the_pinned_runtime():
         assert status["version"] == "2.8.3"
 
 
+def test_runtime_status_exposes_verified_compute_device(monkeypatch, tmp_path):
+    runtime = RuntimeManager(tmp_path / "model")
+    runtime._runtime = SimpleNamespace(sample_rate=24_000)
+    runtime._device_report = {
+        "backend": "CUDA",
+        "verified": True,
+        "device": "cuda:0",
+        "gpu_name": "Test GPU",
+    }
+    monkeypatch.setattr(runtime, "_compute_device_status", lambda: dict(runtime._device_report))
+
+    status = runtime.status()
+
+    assert status["device"] == "cuda:0"
+    assert status["device_verified"] is True
+    assert status["gpu_name"] == "Test GPU"
+    assert status["compute_device"]["backend"] == "CUDA"
+
+
+def test_runtime_has_a_hard_cuda_device_guard():
+    source = (ROOT / "t8_runtime" / "runtime_manager.py").read_text(encoding="utf-8")
+    assert "_verify_cuda_runtime(runtime, model, audio_tokenizer)" in source
+    assert "CUDA 设备校验失败，已阻止 CPU 静默生成" in source
+    assert '"compute_device": self._compute_device_status()' in source
+
+
 def test_windows_fast_all_disables_pytorch_static_cuda_launcher():
     runtime_source = (ROOT / "t8_runtime" / "runtime_manager.py").read_text(encoding="utf-8")
     assert 'os.environ["TORCHINDUCTOR_USE_STATIC_CUDA_LAUNCHER"] = "0"' in runtime_source
@@ -379,6 +405,16 @@ def test_srt_and_multi_role_parsers():
     assert roles == [
         {"role": "小蓝", "text": "你好"},
         {"role": "小明", "text": "早上好\n继续说"},
+    ]
+
+
+def test_multi_role_parser_preserves_official_and_experimental_vocal_events():
+    roles = parse_multi_role_script(
+        "[笑] 开场。\n[抽泣] 仍是旁白。\n[小蓝] 角色登场。\n[喘息] 仍是小蓝。"
+    )
+    assert roles == [
+        {"role": "旁白", "text": "[笑] 开场。\n[抽泣] 仍是旁白。"},
+        {"role": "小蓝", "text": "角色登场。\n[喘息] 仍是小蓝。"},
     ]
 
 

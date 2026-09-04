@@ -33,10 +33,12 @@ test("dialogue projects have an automatic draft and leave guard", () => {
 
 test("role syntax is detected for colon, bracket and pipe formats", () => {
   const roleSource = sourceBetween(renderer, "function normalizeRoleName", "function shouldShowRoleMappings");
-  const context = { INLINE_VOCAL_EVENT_ROLES: new Set(["笑", "咳嗽", "清嗓子", "叹气"]) };
-  vm.runInNewContext(`${roleSource}; this.detect = detectRoleNames;`, context);
+  const context = { INLINE_VOCAL_EVENT_ROLES: new Set(["笑", "笑声", "咳嗽", "清嗓子", "叹气", "叹息", "抽泣", "哭", "喘息", "呼气"]) };
+  vm.runInNewContext(`${roleSource}; this.detect = detectRoleNames; this.looksMultiRole = looksMultiRoleScript;`, context);
   assert.deepEqual(Array.from(context.detect("旁白：开始\n[小蓝] 你好\nAlice | Hello | en | cheerful")), ["旁白", "小蓝", "Alice"]);
-  assert.deepEqual(Array.from(context.detect("[笑] 这仍是普通台词\n[叹气] 第二句")), []);
+  assert.deepEqual(Array.from(context.detect("[笑] 这仍是普通台词\n[抽泣] 第二句\n[喘息] 第三句")), []);
+  assert.equal(context.looksMultiRole("[抽泣] 这仍是普通台词"), false);
+  assert.equal(context.looksMultiRole("[小蓝] 这是角色台词"), true);
   assert.match(renderer, /row\.className = "role-mapping-row"/);
   assert.match(renderer, /matchedVoice/);
   assert.match(renderer, /roleMappingPanel"\)\.addEventListener\("change"/);
@@ -125,9 +127,17 @@ test("successful model activation immediately updates the launch guard", () => {
 });
 
 test("inline vocal events are visible in both Chinese and English", () => {
-  for (const event of ["[笑]", "[咳嗽]", "[清嗓子]", "[叹气]", "(laugh)", "(cough)", "(clears throat)", "(sigh)"]) {
+  const official = ["[笑]", "[咳嗽]", "[清嗓子]", "[叹气]", "(laugh)", "(cough)", "(clears throat)", "(sigh)"];
+  const experimental = ["[笑声]", "[叹息]", "[抽泣]", "[哭]", "[喘息]", "[呼气]", "(laughs)", "(laughing)", "(coughs)", "(sighs)", "(sniff)", "(sneeze)", "(groan)", "(gasp)", "(hum)"];
+  for (const event of official) {
     assert.ok(html.includes(`<code>${event}</code>`), `missing inline vocal event: ${event}`);
+    assert.ok(html.includes(`data-preset-confidence="official" data-preset-value="${event}"`), `missing official event preset: ${event}`);
   }
+  for (const event of experimental) {
+    assert.ok(html.includes(`data-preset-confidence="experimental" data-preset-value="${event}"`), `missing experimental event preset: ${event}`);
+  }
+  assert.match(html, /展开实验事件（15 种写法/);
+  for (const category of ["笑声", "咳嗽与咽喉", "叹息", "哭泣", "呼吸", "鼻腔与生理", "其他发声"]) assert.ok(html.includes(`<h4>${category}</h4>`));
 });
 
 test("normal generation is the default and streaming playback is opt-in", () => {
@@ -153,6 +163,15 @@ test("FlashAttention readiness and active text-encoder backend are visible", () 
   assert.match(renderer, /FlashAttention 2/);
   assert.match(renderer, /runtime\.flash_attention_active/);
   assert.match(renderer, /runtime\.text_encoder_attention/);
+});
+
+test("the desktop verifies and exposes the actual CUDA inference path", () => {
+  assert.match(renderer, /runtime\.device_verified/);
+  assert.match(renderer, /computeDevice\?\.verified/);
+  assert.match(renderer, /实际推理设备/);
+  assert.match(renderer, /CUDA 已验证/);
+  assert.match(html, /CUDA \/ Compute 图表/);
+  assert.match(html, /CPU 仍会参与逐 token 调度/);
 });
 
 test("global task feedback and keyboard tabs remain available across pages", () => {

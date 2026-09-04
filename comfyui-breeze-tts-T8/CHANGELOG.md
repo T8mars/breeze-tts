@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.3 — 2026-09-04
+
+- Synchronize the node package with the Voice Studio categorized vocal-event preset release.
+- Voice Studio now hard-verifies its model, audio codec, and streaming runtime share one CUDA device before generation and reports the actual device; ComfyUI node behavior is unchanged.
+- Keep all eight node contracts, four workflows, canonical inline-event syntax, and host dependency policy unchanged.
+
 ## 0.3.2 — 2026-09-04
 
 - Synchronize the node package with the Voice Studio FlashAttention 2.8.3 release.
