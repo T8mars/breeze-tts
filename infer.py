@@ -12,6 +12,7 @@ import soundfile as sf
 from breeze_infer.runtime import (
     load_runtime,
     resolve_device,
+    resolve_text_encoder_attention,
     set_all_seeds,
     update_generation_config_for_breeze,
 )
@@ -37,6 +38,12 @@ def main() -> None:
     parser.add_argument("--output", type=Path, default=Path("output.wav"))
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--cfg-scale", type=float, default=DEFAULT_CFG_SCALE)
+    parser.add_argument(
+        "--text-encoder-attention",
+        choices=("auto", "eager", "flash_attention_2"),
+        default="auto",
+        help="Attention backend for the T5Gemma2 text encoder (default: auto).",
+    )
     parser.add_argument(
         "--fast-all", action=argparse.BooleanOptionalAction, default=None
     )
@@ -67,10 +74,17 @@ def main() -> None:
     if args.ref_audio is not None and not args.ref_audio.is_file():
         raise FileNotFoundError(f"Reference audio not found: {args.ref_audio}")
 
+    device = resolve_device()
+    text_encoder_attention, attention_fallback = resolve_text_encoder_attention(
+        args.text_encoder_attention, device
+    )
+    if attention_fallback:
+        print(f"text encoder attention fallback: {attention_fallback}")
     tokenizer, model, audio_tokenizer = load_runtime(
         args.model,
-        device=resolve_device(),
+        device=device,
         attn_implementation="eager",
+        text_encoder_attn_implementation=text_encoder_attention,
     )
     update_generation_config_for_breeze(model)
 

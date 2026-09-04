@@ -148,6 +148,13 @@ test("Fast All reports Triton readiness and safely falls back to Eager", () => {
   assert.match(renderer, /runtime\.fast_all_fallback_reason/);
 });
 
+test("FlashAttention readiness and active text-encoder backend are visible", () => {
+  assert.match(renderer, /packages\["flash-attn"\]/);
+  assert.match(renderer, /FlashAttention 2/);
+  assert.match(renderer, /runtime\.flash_attention_active/);
+  assert.match(renderer, /runtime\.text_encoder_attention/);
+});
+
 test("global task feedback and keyboard tabs remain available across pages", () => {
   assert.match(html, /id="globalTaskBar"[^>]+aria-live="polite"[^>]+hidden/);
   assert.match(renderer, /function setGlobalTask/);

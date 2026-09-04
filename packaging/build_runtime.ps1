@@ -14,6 +14,7 @@ $sourcePath = if ($SourcePythonRoot) {
     $null
 }
 $lockPath = Join-Path $projectRoot 'requirements-desktop.lock.txt'
+$flashAttentionRequirement = 'flash_attn @ https://github.com/kingbri1/flash-attention/releases/download/v2.8.3/flash_attn-2.8.3%2Bcu128torch2.9.0cxx11abiFALSE-cp310-cp310-win_amd64.whl#sha256=d64f636f491d2b0347a3464640282f5a016088d516f86ad5e47b37a8b87bb8af'
 $whisperModelRoot = Join-Path $projectRoot '.runtime\whisper-models\faster-whisper-large-v3'
 
 if (-not (Test-Path -LiteralPath (Join-Path $runtimePath 'python.exe'))) {
@@ -50,6 +51,8 @@ if (-not $SkipInstall) {
 
 & $python (Join-Path $PSScriptRoot 'verify_runtime.py') --project-root $projectRoot
 if ($LASTEXITCODE -ne 0) { throw 'Runtime verification failed.' }
+& $python (Join-Path $PSScriptRoot 'verify_flash_attention.py')
+if ($LASTEXITCODE -ne 0) { throw 'FlashAttention runtime verification failed.' }
 
 & $python (Join-Path $PSScriptRoot 'download_whisper_model.py') --output-dir $whisperModelRoot
 if ($LASTEXITCODE -ne 0) { throw 'Bundled Whisper Large-v3 model download failed.' }
@@ -57,6 +60,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Bundled Whisper Large-v3 model download failed
 $freeze = & $python -m pip freeze --all | ForEach-Object {
     if ($_ -match '^pip @ ') { 'pip==26.1.2' }
     elseif ($_ -match '^setuptools @ ') { 'setuptools==82.0.1' }
+    elseif ($_ -match '^flash[_-]attn @ ') { $flashAttentionRequirement }
     else { $_ }
 }
 [System.IO.File]::WriteAllLines($lockPath, $freeze, [System.Text.UTF8Encoding]::new($false))

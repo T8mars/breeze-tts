@@ -18,6 +18,7 @@ exceptiongroup==1.3.1
 fastapi==0.141.1
 faster-whisper==1.2.1
 filelock==3.32.4
+flash_attn @ https://github.com/kingbri1/flash-attention/releases/download/v2.8.3/flash_attn-2.8.3%2Bcu128torch2.9.0cxx11abiFALSE-cp310-cp310-win_amd64.whl#sha256=d64f636f491d2b0347a3464640282f5a016088d516f86ad5e47b37a8b87bb8af
 flatbuffers==25.12.19
 fsspec==2026.7.0
 gradio==6.17.3

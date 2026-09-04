@@ -11,6 +11,7 @@
     "torch": "2.9.1+cu128",
     "torchaudio": "2.9.1+cu128",
     "triton-windows": "3.5.1.post24",
+    "flash-attn": "2.8.3",
     "transformers": "4.57.3",
     "qwen-tts": "0.1.1",
     "numpy": "2.2.6",
@@ -30,10 +31,22 @@
       "path": "models/faster-whisper-large-v3"
     }
   },
-  "resolved_lock_sha256": "a021cebfe23b26ecfc70b19bcda899ce508207d1cad5ef897f9c5dc73fd84248",
-  "runtime_size_bytes": 5676553019,
+  "binary_wheels": {
+    "flash-attn": {
+      "version": "2.8.3",
+      "source": "https://github.com/kingbri1/flash-attention/releases/tag/v2.8.3",
+      "filename": "flash_attn-2.8.3+cu128torch2.9.0cxx11abiFALSE-cp310-cp310-win_amd64.whl",
+      "sha256": "d64f636f491d2b0347a3464640282f5a016088d516f86ad5e47b37a8b87bb8af",
+      "build": "CUDA 12.8 / PyTorch 2.9.0 / CPython 3.10 / Windows x64",
+      "validated_with": "PyTorch 2.9.1+cu128",
+      "embedded_cuda_architectures": ["sm_80", "sm_90", "sm_100", "sm_120"]
+    }
+  },
+  "resolved_lock_sha256": "398f016ff28b59c890c9eccae8114f8bf12787ac90c14874b1965ae9516b6112",
+  "runtime_size_bytes": 6231863936,
   "verification": [
     "packaging/verify_runtime.py",
+    "packaging/verify_flash_attention.py --kernel",
     "packaging/verify_triton.py --kernel",
     "python -m pip check"
   ]

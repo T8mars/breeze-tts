@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.2 — 2026-09-04
+
+- Synchronize the node package with the Voice Studio FlashAttention 2.8.3 release.
+- Keep the ComfyUI host dependency policy and existing eight-node API unchanged.
+
 ## 0.3.1 — 2026-09-04
 
 - Synchronize the node-package release version with the Voice Studio 0.3.1 distribution.

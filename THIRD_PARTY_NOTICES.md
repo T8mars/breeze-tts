@@ -24,6 +24,13 @@ Detailed file-level attribution is included in `comfyui-breeze-tts-T8/THIRD_PART
 
 The Windows portable artifact includes CPython under the Python Software Foundation License and Electron/Chromium plus Python packages under their respective licenses. Their license files and package metadata remain inside the bundled runtime/application. `requirements-desktop.lock.txt` records exact Python package versions.
 
+The Windows runtime also bundles FlashAttention 2.8.3 under the BSD 3-Clause
+License. The binary is a community-built CPython 3.10 / PyTorch 2.9 / CUDA 12.8
+wheel published at `kingbri1/flash-attention` on GitHub Releases. Its download
+URL and SHA-256 digest are pinned in `requirements-desktop.in` and
+`requirements-desktop.lock.txt`; the build does not compile FlashAttention from
+source. Upstream source is `Dao-AILab/flash-attention` tag `v2.8.3`.
+
 The package also includes `faster-whisper` 1.2.1 and the
 `Systran/faster-whisper-large-v3` converted checkpoint. Both report the MIT
 license. `WHISPER_NOTICE.md` records the pinned model revision and source URL,

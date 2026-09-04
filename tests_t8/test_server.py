@@ -255,3 +255,4 @@ def test_capabilities_are_explicit(monkeypatch, tmp_path):
         assert capabilities["srt"] is True
         assert isinstance(capabilities["whisper"], bool)
         assert isinstance(capabilities["whisper_large_bundled"], bool)
+        assert isinstance(capabilities["flash_attention"], bool)

@@ -574,6 +574,7 @@ def create_app(model_dir: Path | None = None) -> FastAPI:
             "whisper": whisper_available(),
             "whisper_large_bundled": bundled_whisper_large_available(),
             "fast_24gb": bool(runtime.status()["fast_all_available"]),
+            "flash_attention": bool(runtime.status()["flash_attention_available"]),
             "editable_timeline": True,
             "per_line_direction": True,
             "projects": True,

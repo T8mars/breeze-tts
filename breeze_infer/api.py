@@ -18,6 +18,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from breeze_infer.runtime import (
     load_runtime,
     resolve_device,
+    resolve_text_encoder_attention,
     set_all_seeds,
     update_generation_config_for_breeze,
 )
@@ -37,6 +38,7 @@ OPTIONAL_AUDIO_FILE = File(None)
 @dataclass(frozen=True)
 class ApiSettings:
     model: Path
+    text_encoder_attention: str
     fast_all: bool | None
     fast_text_encoder: bool
     fast_backbone_prefill: bool
@@ -73,10 +75,17 @@ async def _save_upload(upload: UploadFile) -> Path:
 
 
 def _load_app(app: FastAPI, settings: ApiSettings) -> None:
+    device = resolve_device()
+    text_encoder_attention, attention_fallback = resolve_text_encoder_attention(
+        settings.text_encoder_attention, device
+    )
+    if attention_fallback:
+        print(f"text encoder attention fallback: {attention_fallback}", flush=True)
     tokenizer, model, audio_tokenizer = load_runtime(
         settings.model,
-        device=resolve_device(),
+        device=device,
         attn_implementation="eager",
+        text_encoder_attn_implementation=text_encoder_attention,
     )
     update_generation_config_for_breeze(model)
 
@@ -104,6 +113,11 @@ def _load_app(app: FastAPI, settings: ApiSettings) -> None:
     app.state.model = model
     app.state.audio_tokenizer = audio_tokenizer
     app.state.runtime = runtime
+    app.state.text_encoder_attention = getattr(
+        model.text_encoder.config,
+        "_attn_implementation",
+        text_encoder_attention,
+    )
 
 
 @asynccontextmanager
@@ -121,7 +135,13 @@ app = FastAPI(title="Breeze TTS API", lifespan=_lifespan)
 def health() -> JSONResponse:
     if not hasattr(app.state, "runtime"):
         return JSONResponse({"status": "loading"}, status_code=503)
-    return JSONResponse({"status": "ok", "sample_rate": app.state.runtime.sample_rate})
+    return JSONResponse(
+        {
+            "status": "ok",
+            "sample_rate": app.state.runtime.sample_rate,
+            "text_encoder_attention": app.state.text_encoder_attention,
+        }
+    )
 
 
 @app.post("/v1/audio/speech")
@@ -217,6 +237,12 @@ def main() -> None:
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=7860)
     parser.add_argument(
+        "--text-encoder-attention",
+        choices=("auto", "eager", "flash_attention_2"),
+        default="auto",
+        help="Attention backend for the T5Gemma2 text encoder (default: auto).",
+    )
+    parser.add_argument(
         "--fast-all", action=argparse.BooleanOptionalAction, default=None
     )
     parser.add_argument(
@@ -239,6 +265,7 @@ def main() -> None:
     global _settings
     _settings = ApiSettings(
         model=args.model,
+        text_encoder_attention=args.text_encoder_attention,
         fast_all=args.fast_all,
         fast_text_encoder=args.fast_text_encoder,
         fast_backbone_prefill=args.fast_backbone_prefill,

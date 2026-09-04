@@ -2,6 +2,7 @@
 torch==2.9.1
 torchaudio==2.9.1
 triton-windows==3.5.1.post24; platform_system == "Windows"
+flash-attn @ https://github.com/kingbri1/flash-attention/releases/download/v2.8.3/flash_attn-2.8.3%2Bcu128torch2.9.0cxx11abiFALSE-cp310-cp310-win_amd64.whl#sha256=d64f636f491d2b0347a3464640282f5a016088d516f86ad5e47b37a8b87bb8af ; platform_system == "Windows" and python_version == "3.10"
 qwen-tts==0.1.1
 transformers==4.57.3
 numpy>=2.0,<3

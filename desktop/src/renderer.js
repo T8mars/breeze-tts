@@ -610,6 +610,11 @@ function renderDiagnostics(data) {
   const gpu = data.gpu?.devices?.[0];
   const packages = data.packages || {};
   const tritonVersion = packages["triton-windows"];
+  const flashVersion = packages["flash-attn"];
+  const flashActive = data.runtime?.flash_attention_active === true;
+  const flashReady = Boolean(
+    gpu && flashVersion && data.runtime?.flash_attention_available !== false
+  );
   const fastAllReady = Boolean(
     gpu
     && Number(gpu.memory_total_mib || 0) >= 20 * 1024
@@ -626,8 +631,8 @@ function renderDiagnostics(data) {
   if (!fastAllReady && $("runtimeProfile")?.value === "fast") $("runtimeProfile").value = "eager";
   if ($("runtimeCompatibilityHint")) {
     $("runtimeCompatibilityHint").textContent = fastAllReady
-      ? `Fast All 已就绪：Triton ${tritonVersion} · ${gpu.memory_total_mib} MiB 显存。Eager 仍是默认模式。`
-      : `Fast All 当前不可用：${!tritonVersion ? "缺少整合包内置 Triton" : "需要 Triton 3.5.x 与至少 20 GiB 显存"}；已自动选择 Eager。`;
+      ? `Fast All 已就绪：Triton ${tritonVersion} · ${gpu.memory_total_mib} MiB 显存。标准流式仍是默认模式。`
+      : `Fast All 当前不可用：${!tritonVersion ? "缺少整合包内置 Triton" : "需要 Triton 3.5.x 与至少 20 GiB 显存"}；已自动选择标准流式。`;
   }
   const entries = [
     ["GPU", gpu ? `${gpu.name} · ${formatBytes(gpu.memory_free_mib * 1024 ** 2)} 可用` : "未检测到 NVIDIA GPU", Boolean(gpu)],
@@ -635,6 +640,7 @@ function renderDiagnostics(data) {
     ["PyTorch", `${packages.torch || "缺失"} · CUDA ${gpu ? "可检测" : "不可用"}`, Boolean(packages.torch)],
     ["Transformers", packages.transformers || "缺失", transformersCompatible(packages.transformers)],
     ["Qwen TTS", packages["qwen-tts"] || "缺失", packages["qwen-tts"] === "0.1.1"],
+    ["FlashAttention 2", flashVersion ? `${flashVersion} · ${flashActive ? "文本编码器已启用" : flashReady ? "标准模式可用" : "需要 NVIDIA CUDA GPU"}` : "缺失 · 文本编码器将使用 Eager", flashReady],
     ["Fast All / Triton", tritonVersion ? `${tritonVersion} · ${fastAllReady ? "可用" : "条件未满足"}` : "缺失 · 将使用 Eager", fastAllReady],
     ["模型运行时", data.runtime.loaded ? "已加载" : "按需加载", true]
   ];
@@ -664,6 +670,7 @@ function renderCapabilities(capabilities) {
     voice_library: "音色库",
     srt: "SRT",
     whisper: "Whisper",
+    flash_attention: "FlashAttention 2",
     fast_24gb: "24GB 加速",
     editable_timeline: "可编辑时间轴",
     per_line_direction: "逐句演绎",
@@ -2081,7 +2088,10 @@ async function launchStudio(templateId = "blank") {
     });
     $("launcherView").hidden = true;
     $("studioView").hidden = false;
-    $("runtimeSummary").textContent = `${runtime.fast_all ? "Fast All" : "Eager"} · 24 kHz · 模型已加载${runtime.fast_all_fallback_reason ? ` · ${runtime.fast_all_fallback_reason}` : ""}`;
+    const attentionSummary = runtime.flash_attention_active
+      ? "FlashAttention 2 文本编码器"
+      : `${runtime.text_encoder_attention || "Eager"} 文本编码器`;
+    $("runtimeSummary").textContent = `${runtime.fast_all ? "Fast All" : "标准流式"} · ${attentionSummary} · 24 kHz · 模型已加载${runtime.fast_all_fallback_reason ? ` · ${runtime.fast_all_fallback_reason}` : ""}`;
     applyCreationTemplate(templateId);
     $("quickLaunchFeedback").hidden = true;
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -2758,6 +2768,7 @@ $("copyDiagnosticsButton").addEventListener("click", async () => {
       `PyTorch: ${packages.torch || "缺失"}`,
       `Transformers: ${packages.transformers || "缺失"}`,
       `Qwen TTS: ${packages["qwen-tts"] || "缺失"}`,
+      `FlashAttention: ${packages["flash-attn"] || "缺失"} / ${data.runtime?.text_encoder_attention || "not loaded"}`,
       `Runtime: ${data.runtime?.loaded ? "loaded" : "unloaded"}`,
       `Model valid: ${Boolean(data.model?.valid)}`
     ];

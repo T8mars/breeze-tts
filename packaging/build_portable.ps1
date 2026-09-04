@@ -25,6 +25,8 @@ if (-not (Test-Path -LiteralPath $runtimePython)) {
 }
 & $runtimePython (Join-Path $PSScriptRoot 'verify_runtime.py') --project-root $projectRoot
 if ($LASTEXITCODE -ne 0) { throw 'Existing Python runtime verification failed.' }
+& $runtimePython (Join-Path $PSScriptRoot 'verify_flash_attention.py')
+if ($LASTEXITCODE -ne 0) { throw 'Existing FlashAttention runtime verification failed.' }
 & $runtimePython -m pip check
 if ($LASTEXITCODE -ne 0) { throw 'Existing Python runtime dependency check failed.' }
 

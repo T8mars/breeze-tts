@@ -22,7 +22,12 @@ from t8_runtime.model_store import (
     record_license_acceptance,
     validate_model_dir,
 )
-from t8_runtime.runtime_manager import GenerationRequest, RuntimeManager, fast_all_package_status
+from t8_runtime.runtime_manager import (
+    GenerationRequest,
+    RuntimeManager,
+    fast_all_package_status,
+    flash_attention_package_status,
+)
 from t8_runtime.script_tools import parse_multi_role_script, parse_srt
 from t8_runtime.text_processing import split_text_for_model
 from t8_runtime.pronunciation import apply_pronunciation_aliases
@@ -200,6 +205,26 @@ def test_fast_all_package_status_reports_the_pinned_runtime():
     assert isinstance(status["available"], bool)
     if status["available"]:
         assert status["version"] == "3.5.1.post24"
+
+
+def test_desktop_runtime_pins_prebuilt_flash_attention_wheel():
+    runtime_input = (ROOT / "requirements-desktop.in").read_text(encoding="utf-8").lower()
+    runtime_lock = (ROOT / "requirements-desktop.lock.txt").read_text(encoding="utf-8").lower()
+    verify_script = (ROOT / "packaging" / "verify_runtime.py").read_text(encoding="utf-8").lower()
+    wheel_sha256 = "d64f636f491d2b0347a3464640282f5a016088d516f86ad5e47b37a8b87bb8af"
+    assert "github.com/kingbri1/flash-attention/releases/download/v2.8.3/" in runtime_input
+    assert "cp310-cp310-win_amd64.whl" in runtime_input
+    assert f"sha256={wheel_sha256}" in runtime_input
+    assert "flash_attn @ https://github.com/" in runtime_lock
+    assert f"sha256={wheel_sha256}" in runtime_lock
+    assert '"flash-attn": "2.8.3"' in verify_script
+
+
+def test_flash_attention_package_status_reports_the_pinned_runtime():
+    status = flash_attention_package_status()
+    assert isinstance(status["available"], bool)
+    if status["available"]:
+        assert status["version"] == "2.8.3"
 
 
 def test_windows_fast_all_disables_pytorch_static_cuda_launcher():

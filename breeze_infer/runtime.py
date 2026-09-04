@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import importlib
+import importlib.util
 import os
 import random
 from pathlib import Path
@@ -11,6 +13,49 @@ from transformers import AutoTokenizer
 
 from models.breeze import BreezeForConditionalGeneration
 from models.breeze_config import BreezeConfig
+
+
+TEXT_ENCODER_ATTENTION_BACKENDS = ("auto", "eager", "flash_attention_2")
+
+
+def resolve_text_encoder_attention(requested: str, device: str) -> tuple[str, str | None]:
+    """Resolve the optional text-encoder backend without changing other decoders.
+
+    Breeze's streaming backbone and depth decoder use custom static masks that are
+    not compatible with Transformers' generic FlashAttention wrapper.  The
+    T5Gemma2 text encoder has a dedicated FlashAttention path, so acceleration is
+    deliberately scoped to that component.
+    """
+
+    requested = str(requested).strip().lower()
+    if requested not in TEXT_ENCODER_ATTENTION_BACKENDS:
+        raise ValueError(
+            f"Unsupported text encoder attention backend: {requested!r}; "
+            f"expected one of {TEXT_ENCODER_ATTENTION_BACKENDS}"
+        )
+    if requested == "eager":
+        return "eager", None
+
+    flash_import_error = None
+    flash_installed = importlib.util.find_spec("flash_attn") is not None
+    if flash_installed:
+        try:
+            importlib.import_module("flash_attn")
+        except (ImportError, OSError, RuntimeError) as exc:
+            flash_installed = False
+            flash_import_error = f"flash-attn could not be loaded: {exc}"
+    cuda_ready = device.startswith("cuda") and torch.cuda.is_available()
+    if flash_installed and cuda_ready:
+        return "flash_attention_2", None
+
+    reason = (
+        flash_import_error or "flash-attn is not installed"
+        if not flash_installed
+        else "FlashAttention requires an available NVIDIA CUDA device"
+    )
+    if requested == "flash_attention_2":
+        raise RuntimeError(reason)
+    return "eager", reason
 
 
 def get_dist_info() -> tuple[int, int, int]:
@@ -71,6 +116,7 @@ def load_runtime(
     *,
     device: str,
     attn_implementation: str,
+    text_encoder_attn_implementation: str | None = None,
     cancel_check: Callable[[], None] | None = None,
 ) -> tuple[AutoTokenizer, BreezeForConditionalGeneration, Any]:
 
@@ -95,11 +141,16 @@ def load_runtime(
         cancel_check()
     config = BreezeConfig.from_pretrained(ckpt_dir)
     # The published nested text-encoder config prefers FlashAttention 2.
-    # Windows portable builds intentionally do not bundle flash-attn, so the
-    # caller's verified backend must override both the top-level model and the
-    # nested T5Gemma2 encoder before module construction.
-    config.text_encoder_config.preferred_attn_implementation = attn_implementation
-    config.text_encoder_config._attn_implementation = attn_implementation
+    # Keep Breeze's custom backbone/depth attention independent from the nested
+    # T5Gemma2 encoder. The portable runtime can safely use FlashAttention 2 for
+    # the encoder while the streaming decoders retain their verified backend.
+    text_encoder_attn_implementation = (
+        text_encoder_attn_implementation or attn_implementation
+    )
+    config.text_encoder_config.preferred_attn_implementation = (
+        text_encoder_attn_implementation
+    )
+    config.text_encoder_config._attn_implementation = text_encoder_attn_implementation
     model = BreezeForConditionalGeneration.from_pretrained(
         ckpt_dir,
         config=config,

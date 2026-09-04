@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import importlib
 import importlib.metadata
 import logging
 import math
@@ -29,6 +30,7 @@ MAX_TEXT_CHARS = 20_000
 MAX_INSTRUCTION_CHARS = 4_000
 MIN_FAST_VRAM_BYTES = 20 * 1024**3
 REQUIRED_TRITON_WINDOWS = "3.5.1.post24"
+REQUIRED_FLASH_ATTENTION = "2.8.3"
 LOGGER = logging.getLogger(__name__)
 
 
@@ -49,6 +51,35 @@ def fast_all_package_status() -> dict[str, str | bool | None]:
                 f"Fast All 组件版本不兼容（需要 {REQUIRED_TRITON_WINDOWS}，当前 {version}），"
                 "已自动改用 Eager。"
             ),
+        }
+    return {"available": True, "version": version, "reason": None}
+
+
+def flash_attention_package_status() -> dict[str, str | bool | None]:
+    try:
+        version = importlib.metadata.version("flash-attn")
+    except importlib.metadata.PackageNotFoundError:
+        return {
+            "available": False,
+            "version": None,
+            "reason": "FlashAttention 组件未安装，文本编码器将使用 Eager。",
+        }
+    if version.split("+")[0] != REQUIRED_FLASH_ATTENTION:
+        return {
+            "available": False,
+            "version": version,
+            "reason": (
+                f"FlashAttention 版本不兼容（需要 {REQUIRED_FLASH_ATTENTION}，"
+                f"当前 {version}），文本编码器将使用 Eager。"
+            ),
+        }
+    try:
+        importlib.import_module("flash_attn")
+    except (ImportError, OSError, RuntimeError) as exc:
+        return {
+            "available": False,
+            "version": version,
+            "reason": f"FlashAttention 无法加载（{exc}），文本编码器将使用 Eager。",
         }
     return {"available": True, "version": version, "reason": None}
 
@@ -104,6 +135,8 @@ class RuntimeManager:
         self._fast_all = None
         self._fast_all_requested = None
         self._fast_all_fallback_reason = None
+        self._text_encoder_attention = None
+        self._flash_attention_fallback_reason = None
         self._max_new_tokens = None
         self._loaded_at = None
 
@@ -113,6 +146,7 @@ class RuntimeManager:
 
     def status(self) -> dict:
         fast_package = fast_all_package_status()
+        flash_package = flash_attention_package_status()
         return {
             "loaded": self.loaded,
             "generating": self._generation_lock.locked(),
@@ -122,6 +156,13 @@ class RuntimeManager:
             "fast_all_available": fast_package["available"],
             "fast_all_package_version": fast_package["version"],
             "fast_all_fallback_reason": self._fast_all_fallback_reason,
+            "flash_attention_available": flash_package["available"],
+            "flash_attention_package_version": flash_package["version"],
+            "flash_attention_active": (
+                self.loaded and self._text_encoder_attention == "flash_attention_2"
+            ),
+            "text_encoder_attention": self._text_encoder_attention,
+            "flash_attention_fallback_reason": self._flash_attention_fallback_reason,
             "max_new_tokens": self._max_new_tokens,
             "loaded_at": self._loaded_at,
             "sample_rate": getattr(self._runtime, "sample_rate", SAMPLE_RATE),
@@ -156,16 +197,6 @@ class RuntimeManager:
                     effective_fast_all = False
                     fallback_reason = str(support["reason"])
 
-            if self.loaded and self._fast_all == effective_fast_all:
-                self._runtime.config = replace(
-                    self._runtime.config, max_new_tokens=max_new_tokens
-                )
-                self._max_new_tokens = max_new_tokens
-                self._fast_all_requested = requested_fast_all
-                self._fast_all_fallback_reason = fallback_reason
-                return
-            if self.loaded:
-                self._unload_state()
             if os.name == "nt":
                 # PyTorch 2.9's static CUDA launcher maps Triton i64 arguments to
                 # C long. Windows keeps C long at 32 bits, so valid device pointers
@@ -200,15 +231,58 @@ class RuntimeManager:
             from breeze_infer.runtime import (
                 load_runtime,
                 resolve_device,
+                resolve_text_encoder_attention,
                 update_generation_config_for_breeze,
             )
             from models.fast_streaming import FastBreezeStreamingRuntime, FastStreamingConfig
             from models.warmup_profile import load_warmup_profile
 
+            device = resolve_device()
+            flash_support = flash_attention_package_status()
+            attention_request = (
+                "flash_attention_2" if flash_support["available"] else "eager"
+            )
+            flash_fallback_reason = (
+                None if flash_support["available"] else str(flash_support["reason"])
+            )
+            if effective_fast_all:
+                text_encoder_attention = "sdpa"
+                flash_fallback_reason = (
+                    "Fast All 的文本编码器使用 SDPA CUDA Graph；"
+                    "FlashAttention 保留给标准流式模式。"
+                )
+            else:
+                try:
+                    text_encoder_attention, hardware_reason = (
+                        resolve_text_encoder_attention(attention_request, device)
+                    )
+                    if hardware_reason:
+                        flash_fallback_reason = hardware_reason
+                except RuntimeError as exc:
+                    text_encoder_attention = "eager"
+                    flash_fallback_reason = str(exc)
+
+            if (
+                self.loaded
+                and self._fast_all == effective_fast_all
+                and self._text_encoder_attention == text_encoder_attention
+            ):
+                self._runtime.config = replace(
+                    self._runtime.config, max_new_tokens=max_new_tokens
+                )
+                self._max_new_tokens = max_new_tokens
+                self._fast_all_requested = requested_fast_all
+                self._fast_all_fallback_reason = fallback_reason
+                self._flash_attention_fallback_reason = flash_fallback_reason
+                return
+            if self.loaded:
+                self._unload_state()
+
             tokenizer, model, audio_tokenizer = load_runtime(
                 self.model_dir,
-                device=resolve_device(),
+                device=device,
                 attn_implementation="eager",
+                text_encoder_attn_implementation=text_encoder_attention,
                 cancel_check=lambda: self._raise_if_cancelled(cancel_event),
             )
             update_generation_config_for_breeze(model)
@@ -238,6 +312,15 @@ class RuntimeManager:
                     if torch.cuda.is_available():
                         torch.cuda.empty_cache()
                     config = replace(config, fast_all=False)
+                    if flash_support["available"]:
+                        model.text_encoder.config.preferred_attn_implementation = (
+                            "flash_attention_2"
+                        )
+                        model.text_encoder.config._attn_implementation = (
+                            "flash_attention_2"
+                        )
+                        text_encoder_attention = "flash_attention_2"
+                        flash_fallback_reason = None
                     runtime = FastBreezeStreamingRuntime(model, audio_tokenizer, config, tokenizer=tokenizer)
             self._tokenizer = tokenizer
             self._model = model
@@ -246,6 +329,8 @@ class RuntimeManager:
             self._fast_all = effective_fast_all
             self._fast_all_requested = requested_fast_all
             self._fast_all_fallback_reason = fallback_reason
+            self._text_encoder_attention = text_encoder_attention
+            self._flash_attention_fallback_reason = flash_fallback_reason
             self._max_new_tokens = max_new_tokens
             self._loaded_at = time.time()
             if torch.cuda.is_available():
@@ -259,6 +344,8 @@ class RuntimeManager:
         self._fast_all = None
         self._fast_all_requested = None
         self._fast_all_fallback_reason = None
+        self._text_encoder_attention = None
+        self._flash_attention_fallback_reason = None
         self._max_new_tokens = None
         self._loaded_at = None
         try:

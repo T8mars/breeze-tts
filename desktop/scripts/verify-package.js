@@ -94,7 +94,7 @@ const python = path.join(root, "resources/python/python.exe");
 const backend = path.join(root, "resources/backend");
 const smoke = spawnSync(
   python,
-  ["-c", "import importlib.metadata,torch,transformers,triton,qwen_tts,faster_whisper,t8_runtime.server; from torch.utils._triton import has_triton_package; from t8_runtime.transcription import bundled_whisper_large_available; assert bundled_whisper_large_available(); assert has_triton_package(); assert importlib.metadata.version('triton-windows') == '3.5.1.post24'; print(torch.__version__,transformers.__version__,triton.__version__)"],
+  ["-c", "import flash_attn,importlib.metadata,torch,transformers,triton,qwen_tts,faster_whisper,t8_runtime.server; from torch.utils._triton import has_triton_package; from t8_runtime.transcription import bundled_whisper_large_available; assert bundled_whisper_large_available(); assert has_triton_package(); assert importlib.metadata.version('triton-windows') == '3.5.1.post24'; assert importlib.metadata.version('flash-attn') == '2.8.3'; print(torch.__version__,transformers.__version__,triton.__version__,flash_attn.__version__)"],
   {
     cwd: backend,
     encoding: "utf8",

@@ -57,6 +57,7 @@ def collect_diagnostics() -> dict[str, Any]:
         "torch",
         "torchaudio",
         "triton-windows",
+        "flash-attn",
         "transformers",
         "qwen-tts",
         "accelerate",
