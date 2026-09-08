@@ -4,15 +4,15 @@ T8star-Aix Voice Studio is an unofficial Breeze TTS 2 integration. It does not c
 
 ## Breeze TTS 2 source
 
-The included Breeze TTS 2 source is from `breezeblue-ai/breeze-tts` at revision `ca632ce6c4d05f7985da4eab29b1a5d445b43f7b`, licensed under Apache License 2.0. See `LICENSE`.
+The included Breeze TTS 2 source is synchronized through `breezeblue-ai/breeze-tts` revision `e2c5ac2f54fe15daa94237a7dbf31e446660a4c9`, licensed under Apache License 2.0. See `LICENSE`.
 
 ## Breeze TTS 2 model
 
-The application downloads `BreezeBlue/Breeze-TTS-2` at pinned revision `c1c8ca18b70b30822735633991d9ebf4898e47d4`. Model weights, tokenizer/codec model materials, derivative models, and self-hosted outputs are governed by the BreezeBlue Research and Non-Commercial License Agreement.
+The application downloads `BreezeBlue/Breeze-TTS-2` at pinned revision `799624c0b4a1daa8db6d28bbd9850043c0270734`. Model weights, tokenizer/codec model materials, derivative models, and self-hosted outputs are governed by the BreezeBlue Research and Non-Commercial License Agreement version 1.1.
 
 Breeze TTS 2 is licensed under the BreezeBlue Research and Non-Commercial License Agreement. Copyright (c) 2026 RESONIA, INC. All Rights Reserved.
 
-The application requires each recipient to accept the model agreement before download or use. Commercial use is not granted. Users must hold the necessary rights and consent for every reference voice.
+As an application safeguard, this integration requires the local user to acknowledge the model agreement before download or use. Commercial rights to the open-weight model and self-hosted outputs are not granted. Paid hosted BreezeBlue output is governed separately by BreezeBlue's service terms. Users must hold the necessary rights and consent for every reference voice.
 
 ## ComfyUI node compatibility code
 

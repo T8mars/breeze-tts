@@ -618,6 +618,7 @@ function renderDiagnostics(data) {
   const packages = data.packages || {};
   const tritonVersion = packages["triton-windows"];
   const flashVersion = packages["flash-attn"];
+  const bf16Ready = Boolean(gpu?.native_bf16_supported);
   const flashActive = data.runtime?.flash_attention_active === true;
   const flashReady = Boolean(
     gpu && flashVersion && data.runtime?.flash_attention_available !== false
@@ -643,6 +644,7 @@ function renderDiagnostics(data) {
   }
   const entries = [
     ["GPU", gpu ? `${gpu.name} · ${formatBytes(gpu.memory_free_mib * 1024 ** 2)} 可用` : "未检测到 NVIDIA GPU", Boolean(gpu)],
+    ["BF16 硬件", gpu ? `${gpu.compute_capability ? `SM ${gpu.compute_capability} · ` : ""}${bf16Ready ? "原生支持" : "不原生支持；Breeze 可能数值不稳定"}` : "等待 NVIDIA GPU", bf16Ready],
     ["Python", `${data.python.version} · ${data.python.architecture}`, true],
     ["PyTorch", `${packages.torch || "缺失"} · CUDA ${gpu ? "可检测" : "不可用"}`, Boolean(packages.torch)],
     ["Transformers", packages.transformers || "缺失", transformersCompatible(packages.transformers)],

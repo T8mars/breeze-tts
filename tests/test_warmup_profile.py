@@ -14,7 +14,7 @@ def _payload() -> dict:
     return json.loads((REPO_ROOT / "configs" / "fast.json").read_text())
 
 
-def test_bundled_config_covers_cfg1_and_cfg4() -> None:
+def test_bundled_config_covers_cfg1_cfg4_and_voice_direction() -> None:
     profile = load_warmup_profile(REPO_ROOT / "configs" / "fast.json")
 
     assert profile.cfg_scales == (1.0, 4.0)
@@ -28,7 +28,7 @@ def test_bundled_config_covers_cfg1_and_cfg4() -> None:
         1,
         2,
     }
-    assert {graph.batch_size for graph in profile.text_encoder_graphs} == {1, 2}
+    assert {graph.batch_size for graph in profile.text_encoder_graphs} == {1, 2, 4}
     cfg1_text_lengths = [
         graph.token_length
         for graph in profile.text_encoder_graphs
@@ -39,8 +39,14 @@ def test_bundled_config_covers_cfg1_and_cfg4() -> None:
         for graph in profile.text_encoder_graphs
         if graph.batch_size == 2
     ]
+    voice_direction_text_lengths = [
+        graph.token_length
+        for graph in profile.text_encoder_graphs
+        if graph.batch_size == 4
+    ]
     assert cfg1_text_lengths == list(range(32, 257, 32))
     assert cfg_guided_text_lengths == list(range(32, 513, 32))
+    assert voice_direction_text_lengths == [32, 64, 96, 128, 160, 256]
 
 
 def test_config_requires_decode_graph_for_each_cfg_shape() -> None:

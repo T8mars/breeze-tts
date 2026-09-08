@@ -31,6 +31,8 @@ from t8_runtime.runtime_manager import (
 from t8_runtime.script_tools import parse_multi_role_script, parse_srt
 from t8_runtime.text_processing import split_text_for_model
 from t8_runtime.pronunciation import apply_pronunciation_aliases
+from t8_runtime.diagnostics import _native_bf16_supported
+from t8_runtime.server import _apply_line_direction, _generation_request
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -71,7 +73,7 @@ def test_generation_request_modes(mode, tmp_path):
     request = GenerationRequest(
         mode=mode,
         text="hello",
-        instruction="calm",
+        instruction="calm" if mode != "clone" else None,
         ref_audio_path=reference,
         ref_text=ref_text,
     )
@@ -81,6 +83,42 @@ def test_generation_request_modes(mode, tmp_path):
 def test_clone_requires_reference():
     with pytest.raises(ValueError, match="参考音频"):
         GenerationRequest(mode="clone", text="hello").validate()
+
+
+def test_clone_rejects_an_instruction(tmp_path):
+    reference = tmp_path / "reference.wav"
+    reference.write_bytes(b"test")
+    with pytest.raises(ValueError, match="Voice Direction"):
+        GenerationRequest(
+            mode="clone",
+            text="hello",
+            instruction="Speak clearly.",
+            ref_audio_path=reference,
+            ref_text="reference",
+        ).validate()
+
+
+def test_server_strips_legacy_instruction_from_pure_clone(tmp_path):
+    request = _generation_request(
+        {
+            "mode": "clone",
+            "text": "克隆文本。",
+            "reference_text": "参考文本。",
+            "instruction": "旧版默认指令不应进入纯克隆。",
+        },
+        tmp_path / "reference.wav",
+    )
+    assert request.mode == "clone"
+    assert request.instruction is None
+
+
+def test_server_neutral_direction_becomes_reference_only_clone():
+    payload = _apply_line_direction(
+        {"mode": "direction", "instruction": "激动", "direction_mode": "neutral"},
+        base_instruction="激动",
+    )
+    assert payload["mode"] == "clone"
+    assert "instruction" not in payload
 
 
 def test_generation_request_rejects_unbounded_text():
@@ -96,7 +134,7 @@ def test_long_design_uses_first_segment_as_fixed_seed_voice_anchor(monkeypatch, 
     manager._audio_tokenizer = object()
     manager._runtime = SimpleNamespace(
         sample_rate=24_000,
-        iter_audio_chunks=lambda _inputs, request_id: iter([
+        iter_audio_chunks=lambda _inputs, request_id, seed: iter([
             SimpleNamespace(audio=np.full(1200, 0.1, dtype=np.float32))
         ]),
     )
@@ -112,6 +150,11 @@ def test_long_design_uses_first_segment_as_fixed_seed_voice_anchor(monkeypatch, 
     runtime_module.set_all_seeds = lambda seed: seeds.append(seed)
     templates_module = ModuleType("breeze_infer.templates")
     templates_module.get_template = lambda name: name
+    templates_module.select_template_name = lambda request: (
+        "ref_edit_tata"
+        if request.get("ref_audio_path") and request.get("instruction")
+        else "tts_instruction"
+    )
     templates_module.prepare_inputs = lambda *_args, **_kwargs: templates.append(_args[4]) or {}
     audio_module = ModuleType("breeze_infer.audio")
 
@@ -140,6 +183,62 @@ def test_long_design_uses_first_segment_as_fixed_seed_voice_anchor(monkeypatch, 
         "strategy": "first_segment_reference",
         "seed_strategy": "fixed",
     }
+
+
+def test_clone_generation_uses_reference_only_template_and_sampling_seed(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("T8_BREEZE_OUTPUT_DIR", str(tmp_path / "output"))
+    reference = tmp_path / "reference.wav"
+    reference.write_bytes(b"reference")
+    manager = RuntimeManager(tmp_path / "model")
+    manager._tokenizer = object()
+    manager._model = object()
+    manager._audio_tokenizer = object()
+    sampled = []
+    manager._runtime = SimpleNamespace(
+        sample_rate=24_000,
+        iter_audio_chunks=lambda _inputs, **kwargs: sampled.append(kwargs) or iter([
+            SimpleNamespace(audio=np.full(1200, 0.1, dtype=np.float32))
+        ]),
+    )
+    monkeypatch.setattr(manager, "load", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        "t8_runtime.runtime_manager.split_text_for_model",
+        lambda _text, _tokenizer: ["克隆测试。"],
+    )
+    templates = []
+    runtime_module = ModuleType("breeze_infer.runtime")
+    runtime_module.set_all_seeds = lambda _seed: None
+    templates_module = ModuleType("breeze_infer.templates")
+    templates_module.get_template = lambda name: name
+    templates_module.select_template_name = lambda request: (
+        "ref_edit_tata" if request.get("instruction") else "ref_clone_tata"
+    )
+    templates_module.prepare_inputs = (
+        lambda *_args, **_kwargs: templates.append(_args[4]) or {}
+    )
+    audio_module = ModuleType("breeze_infer.audio")
+    audio_module.encode_prompt_audio = lambda _tokenizer, _path: [1, 2, 3]
+    monkeypatch.setitem(sys.modules, "breeze_infer.runtime", runtime_module)
+    monkeypatch.setitem(sys.modules, "breeze_infer.templates", templates_module)
+    monkeypatch.setitem(sys.modules, "breeze_infer.audio", audio_module)
+
+    _, metadata = manager.generate(
+        GenerationRequest(
+            mode="clone",
+            text="克隆测试。",
+            ref_audio_path=reference,
+            ref_text="参考文本。",
+            seed=73,
+        )
+    )
+
+    assert templates == ["ref_clone_tata"]
+    assert len(sampled) == 1
+    assert sampled[0]["request_id"]
+    assert sampled[0]["seed"] == 73
+    assert metadata["segments"][0]["template"] == "ref_clone_tata"
 
 
 def test_model_download_requires_license_acceptance(tmp_path):
@@ -251,6 +350,13 @@ def test_runtime_has_a_hard_cuda_device_guard():
     assert "_verify_cuda_runtime(runtime, model, audio_tokenizer)" in source
     assert "CUDA 设备校验失败，已阻止 CPU 静默生成" in source
     assert '"compute_device": self._compute_device_status()' in source
+
+
+def test_bf16_hardware_warning_uses_compute_capability():
+    assert _native_bf16_supported("8.0") is True
+    assert _native_bf16_supported("12.0") is True
+    assert _native_bf16_supported("7.5") is False
+    assert _native_bf16_supported("unknown") is False
 
 
 def test_windows_fast_all_disables_pytorch_static_cuda_launcher():

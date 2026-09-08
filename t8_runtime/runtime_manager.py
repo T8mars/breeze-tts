@@ -88,7 +88,7 @@ def flash_attention_package_status() -> dict[str, str | bool | None]:
 class GenerationRequest:
     mode: str
     text: str
-    instruction: str = DEFAULT_INSTRUCTION
+    instruction: str | None = None
     ref_audio_path: Path | None = None
     ref_text: str | None = None
     cfg_scale: float = 1.0
@@ -106,7 +106,8 @@ class GenerationRequest:
             raise ValueError("目标文本不能为空。")
         if len(self.text) > MAX_TEXT_CHARS:
             raise ValueError(f"目标文本不能超过 {MAX_TEXT_CHARS} 个字符。")
-        if len(self.instruction) > MAX_INSTRUCTION_CHARS:
+        instruction = (self.instruction or "").strip()
+        if len(instruction) > MAX_INSTRUCTION_CHARS:
             raise ValueError(f"演绎指令不能超过 {MAX_INSTRUCTION_CHARS} 个字符。")
         if self.ref_text is not None and len(self.ref_text) > MAX_TEXT_CHARS:
             raise ValueError(f"参考逐字稿不能超过 {MAX_TEXT_CHARS} 个字符。")
@@ -119,8 +120,10 @@ class GenerationRequest:
             raise ValueError("Voice Clone/Direction 必须同时提供参考音频和准确逐字稿。")
         if self.ref_audio_path is not None and not self.ref_audio_path.is_file():
             raise FileNotFoundError(f"参考音频不存在：{self.ref_audio_path}")
-        if self.mode in {"design", "direction"} and not self.instruction.strip():
+        if self.mode in {"design", "direction"} and not instruction:
             raise ValueError("Voice Design/Direction 的演绎指令不能为空。")
+        if self.mode == "clone" and instruction:
+            raise ValueError("Voice Clone 不能包含演绎指令；如需控制演绎请使用 Voice Direction。")
 
 
 class RuntimeManager:
@@ -510,7 +513,11 @@ class RuntimeManager:
                 cancel_event=cancel_event,
             )
             from breeze_infer.runtime import set_all_seeds
-            from breeze_infer.templates import get_template, prepare_inputs
+            from breeze_infer.templates import (
+                get_template,
+                prepare_inputs,
+                select_template_name,
+            )
             from breeze_infer.audio import encode_prompt_audio
 
             self._raise_if_cancelled(cancel_event)
@@ -525,12 +532,10 @@ class RuntimeManager:
             if not segments:
                 raise ValueError("目标文本不能为空。")
             request_id = uuid.uuid4().hex
-            template_name = "tts_instruction"
             reference_codes = None
             reference_path = request.ref_audio_path
             reference_text = (request.ref_text or "").strip()
             if request.ref_audio_path is not None:
-                template_name = "ref_edit_tata"
                 reference_codes = encode_prompt_audio(audio_tokenizer, request.ref_audio_path)
                 self._raise_if_cancelled(cancel_event)
             destination = output_dir()
@@ -566,26 +571,33 @@ class RuntimeManager:
                         payload = {
                             "id": f"{request_id}-{segment_index}",
                             "text": segment_text,
-                            "instruction": request.instruction.strip() or DEFAULT_INSTRUCTION,
                             "speaker": "S0",
                         }
+                        instruction = (request.instruction or "").strip()
+                        if instruction:
+                            payload["instruction"] = instruction
                         if reference_path is not None:
                             payload["ref_audio_path"] = str(reference_path)
                             payload["ref_audio_codes"] = reference_codes
                             payload["ref_text"] = reference_text
+                        template_name = select_template_name(payload)
                         inputs = prepare_inputs(
                             tokenizer,
                             audio_tokenizer,
                             model,
                             [payload],
-                            get_template("ref_edit_tata" if reference_path is not None else template_name),
+                            get_template(template_name),
                             guidance_scale=request.cfg_scale,
                             guidance_scale_ref=None,
                             guidance_scale_ins=None,
                         )
                         segment_samples = 0
                         anchor_chunks: list[np.ndarray] = []
-                        for chunk in runtime.iter_audio_chunks(inputs, request_id=payload["id"]):
+                        for chunk in runtime.iter_audio_chunks(
+                            inputs,
+                            request_id=payload["id"],
+                            seed=segment_seed,
+                        ):
                             self._raise_if_cancelled(cancel_event)
                             audio = np.asarray(chunk.audio, dtype=np.float32).reshape(-1)
                             if audio.size == 0:
@@ -605,6 +617,7 @@ class RuntimeManager:
                                 "index": segment_index,
                                 "text": segment_text,
                                 "seed": segment_seed,
+                                "template": template_name,
                                 "samples": segment_samples,
                                 "voice_anchor": "source" if segment_index == 0 and voice_lock_enabled else (
                                     "first_segment" if voice_lock_enabled else "reference" if request.ref_audio_path else "none"

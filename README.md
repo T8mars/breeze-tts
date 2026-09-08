@@ -14,9 +14,9 @@
 > [!NOTE]
 > This workspace also contains the unofficial **T8star-Aix Voice Studio** Windows portable integration and the user-requested `comfyui-breeze-tts-T8` node package. See [`T8_DISTRIBUTION.md`](T8_DISTRIBUTION.md) and [`roadmap.md`](roadmap.md). These additions are not affiliated with or endorsed by BreezeBlue.
 
-### T8star-Aix Voice Studio 0.3.3
+### T8star-Aix Voice Studio 0.3.4
 
-The Windows integration uses an IndexTTS 2.5-inspired light launcher and functional workbench. Version 0.3.3 adds a categorized vocal-event picker covering 8 official example spellings and 15 clearly marked experimental spellings, while keeping bracketed events intact in multi-role scripts. It now hard-verifies that the Breeze model, audio codec, and streaming runtime share one CUDA device before generation, and exposes the actual GPU/device plus CUDA memory counters in diagnostics and output metadata. It retains the checksum-verified prebuilt FlashAttention 2.8.3 runtime, bundled Whisper Large-v3 editable transcription drafts, high-visibility transcript warning, stable long-form Voice Design anchor, separate display/spoken text for rare-character pronunciation, categorized creative presets, per-line rerun, and automatic full-timeline remix.
+The Windows integration uses an IndexTTS 2.5-inspired light launcher and functional workbench. Version 0.3.4 synchronizes the official 2026-09-08 inference fixes: pure Voice Clone now uses the reference-only prompt, Voice Direction remains instruction-guided, sampling seeds are reset at the real request boundary, Fast All selects the smallest fitting CUDA Graph bucket and includes batch-4 warmups, runtime caches follow the model's BF16 dtype, and the nested text encoder keeps its independently selected FlashAttention/SDPA backend. It also pins the 2026-09-02 model documentation and BreezeBlue license 1.1, without redownloading unchanged weights. Diagnostics warn when the GPU lacks native BF16 support and still hard-verify that the model, codec, and generation runtime share one CUDA device.
 
 Whisper never cleans or changes the reference waveform. Its text is only a draft: play the reference audio and correct every word before confirming it. A wrong or incomplete transcript paired with the reference can lead to repetitions, dragged syllables, echo-like artifacts, or an unstable cloned voice.
 
@@ -195,7 +195,7 @@ Individual stage flags are intended for profiling and debugging.
 
 The source code is licensed under the [Apache License, Version 2.0](https://github.com/breezeblue-ai/breeze-tts/blob/main/LICENSE). The audio tokenizer is based on [Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) by the Alibaba Qwen Team and is licensed under the Apache License, Version 2.0. Model weights, checkpoints, adapters, derivative models, and self-hosted outputs are governed separately by the [BreezeBlue Research and Non-Commercial License](https://huggingface.co/BreezeBlue/Breeze-TTS-2/blob/main/LICENSE). The Apache License does not grant rights to use the model commercially.
 
-Commercial use requires written authorization from BreezeBlue AI. Hosted BreezeBlue services are governed by their applicable service terms. For commercial licensing, contact [contact@breeze.blue](mailto:contact@breeze.blue).
+Outputs generated through BreezeBlue's paid hosted platform or API may be used commercially subject to its Terms of Service. That subscription does not grant commercial rights to the open-weight model or self-hosted outputs. For open-weight commercial licensing, contact [contact@breeze.blue](mailto:contact@breeze.blue).
 
 You are responsible for complying with applicable laws and obtaining all necessary rights and consents for inputs, reference audio, voices, and outputs. Unauthorized voice cloning, impersonation, fraud, and other unlawful or harmful uses are prohibited.
 

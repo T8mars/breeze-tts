@@ -280,11 +280,16 @@ def _apply_line_direction(payload: dict[str, Any], *, base_instruction: str) -> 
         if merged.get("mode") == "clone":
             merged["mode"] = "direction"
     elif direction_mode == "neutral":
-        merged["instruction"] = DEFAULT_INSTRUCTION
-        if merged.get("mode") == "clone":
-            merged["mode"] = "direction"
+        if merged.get("mode") in {"clone", "direction"}:
+            merged["mode"] = "clone"
+            merged.pop("instruction", None)
+        else:
+            merged["instruction"] = DEFAULT_INSTRUCTION
     elif direction_mode == "inherit":
-        merged["instruction"] = base_instruction
+        if merged.get("mode") == "clone":
+            merged.pop("instruction", None)
+        else:
+            merged["instruction"] = base_instruction or DEFAULT_INSTRUCTION
     else:
         raise ValueError("逐句演绎模式必须是 inherit、override 或 neutral。")
     return merged
@@ -339,10 +344,15 @@ def _generation_request(payload: dict[str, Any], reference_path: Path | None) ->
         payload.get("pronunciation_aliases"),
         language=str(payload.get("language") or "auto"),
     )
+    instruction = str(payload.get("instruction") or "").strip()
+    if mode in {"design", "direction"} and not instruction:
+        instruction = DEFAULT_INSTRUCTION
+    elif mode == "clone":
+        instruction = ""
     return GenerationRequest(
         mode=mode,
         text=spoken_text,
-        instruction=str(payload.get("instruction") or DEFAULT_INSTRUCTION),
+        instruction=instruction or None,
         ref_audio_path=reference_path,
         ref_text=str(payload.get("reference_text") or "") or None,
         cfg_scale=float(default_cfg if cfg_scale in {None, ""} else cfg_scale),

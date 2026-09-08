@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.4 — 2026-09-09
+
+- Synchronize the official Voice Clone/Design/Direction routing, including reference-only pure cloning and no implicit clone instruction.
+- Reset the seed at the actual sampling boundary, use the semantic backbone dtype for runtime caches, and select the smallest fitting warmed text-encoder graph bucket.
+- Add the official batch-4 Fast All warmup buckets and preserve the nested text encoder's independent attention implementation.
+- Disable the inapplicable Mistral tokenizer regex repair explicitly and pin the official model documentation/license revision `799624c0` (weights unchanged).
+- Surface native BF16 hardware compatibility in desktop diagnostics and retain the hard CUDA device guard.
+
 ## 0.3.3 — 2026-09-04
 
 - Synchronize the node package with the Voice Studio categorized vocal-event preset release.

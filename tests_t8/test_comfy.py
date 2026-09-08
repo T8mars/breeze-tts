@@ -73,8 +73,8 @@ def _write_voice_bundle(path: Path, *, payload: bytes | None = None, digest: str
 def test_comfy_package_registers_eight_nodes():
     package_dir = ROOT / "comfyui-breeze-tts-T8"
     module = _load_package("comfyui_breeze_tts_T8_test")
-    assert module.__version__ == "0.3.3"
-    assert 'version = "0.3.3"' in (package_dir / "pyproject.toml").read_text(encoding="utf-8")
+    assert module.__version__ == "0.3.4"
+    assert 'version = "0.3.4"' in (package_dir / "pyproject.toml").read_text(encoding="utf-8")
     assert len(module.NODE_CLASS_MAPPINGS) == 8
     assert set(module.NODE_CLASS_MAPPINGS) == {
         "T8_BreezeTTS_ModelLoader",
@@ -132,6 +132,19 @@ def test_comfy_package_registers_eight_nodes():
     assert "PreviewAudio" in {
         node["class_type"] for node in workflows["voice_design_api.json"].values()
     }
+    clone_api_request = workflows["voice_clone_api.json"]["3"]["inputs"]
+    assert "instruction" not in clone_api_request
+    clone_ui = json.loads(
+        (package_dir / "examples" / "voice_clone_workflow.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    clone_ui_request = next(
+        node
+        for node in clone_ui["nodes"]
+        if node["type"] == "T8_BreezeTTS_CloneRequest"
+    )
+    assert clone_ui_request["widgets_values"][2] == ""
     requirements = (package_dir / "requirements.txt").read_text(encoding="utf-8").lower()
     declared = {
         line.split("=", 1)[0].split(">", 1)[0].strip()
@@ -231,10 +244,17 @@ def test_inline_vocal_events_are_documented_and_preserved_by_request_nodes():
 
     design, = nodes.BreezeT8DesignRequest().build(text, "温和清晰。", 4.0)
     clone, = nodes.BreezeT8CloneRequest().build(text, audio, "准确逐字稿。")
+    directed_clone, = nodes.BreezeT8CloneRequest().build(
+        text, audio, "准确逐字稿。", "语气坚定。"
+    )
     direction, = nodes.BreezeT8DirectionRequest().build(
         text, audio, "准确逐字稿。", "先严肃，随后轻笑。", 4.0
     )
     assert design["text"] == clone["text"] == direction["text"] == text
+    assert clone["mode"] == "clone"
+    assert "instruction" not in clone
+    assert directed_clone["mode"] == "direction"
+    assert directed_clone["instruction"] == "语气坚定。"
 
     for request_node in (
         nodes.BreezeT8DesignRequest,
@@ -276,6 +296,7 @@ def test_desktop_voice_bundle_builds_standard_audio_and_line_override(tmp_path):
         str(bundle), "[咳嗽] 新的台词。", "inherit", "", 0.0
     )
     assert request["mode"] == "clone"
+    assert "instruction" not in request
     assert request["reference_audio"] is audio
     assert request["reference_text"] == "这是一段准确的参考文本。"
     assert request["voice_id"] == "voice-test"
@@ -295,7 +316,7 @@ def test_desktop_voice_bundle_builds_standard_audio_and_line_override(tmp_path):
     original = dict(request)
     neutral, = nodes.BreezeT8LineDirection().apply(request, "neutral", "unused", 0.0)
     assert neutral["mode"] == "clone"
-    assert neutral["instruction"] == nodes.runtime.DEFAULT_INSTRUCTION
+    assert "instruction" not in neutral
     assert request == original
 
 

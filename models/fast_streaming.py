@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import time
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
@@ -130,6 +130,15 @@ def _get_device(model: torch.nn.Module) -> torch.device:
 
 
 def _get_dtype(model: torch.nn.Module) -> torch.dtype:
+    # CUDA graph setup casts the shared lm_head to FP32. The semantic
+    # backbone remains BF16 and is the authoritative dtype for KV caches when
+    # the same model is used to construct another streaming runtime.
+    backbone_model = getattr(model, "backbone_model", None)
+    if isinstance(backbone_model, torch.nn.Module):
+        try:
+            return next(backbone_model.parameters()).dtype
+        except StopIteration:
+            pass
     try:
         return next(model.parameters()).dtype
     except StopIteration:
@@ -744,6 +753,8 @@ class FastBreezeStreamingRuntime:
         inputs: dict[str, Any],
         *,
         request_id: str | None = None,
+        seed: int | None = None,
+        token_observer: Callable[[torch.Tensor], None] | None = None,
     ) -> Iterator[FastStreamingChunk]:
         cfg = select_fast_cfg(inputs)
         branch_batch_size = 2 if cfg.mode == "single_cfg" else 1
@@ -766,6 +777,12 @@ class FastBreezeStreamingRuntime:
             dtype=torch.long,
             device=self.device,
         )
+        # Lazy graph/cache/codec initialization above may consume RNG state.
+        # Reset at the true request boundary so a seed identifies the same
+        # sampling trajectory on cold and warm requests.
+        if seed is not None:
+            torch.manual_seed(seed)
+            torch.cuda.manual_seed_all(seed)
         first_decode = True
         t_start = time.perf_counter()
         t_chunk = t_start
@@ -848,6 +865,8 @@ class FastBreezeStreamingRuntime:
                     **depth_params,
                 )
                 frame = torch.cat([token.view(1), depth_tokens[0]], dim=0)
+                if token_observer is not None:
+                    token_observer(frame)
                 if should_decode_codec_frame(frame, self.model.config):
                     chunk_buffer.append(frame.detach())
 

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import os
 import tempfile
 import threading
 import uuid
@@ -22,8 +24,12 @@ from breeze_infer.runtime import (
     set_all_seeds,
     update_generation_config_for_breeze,
 )
-from breeze_infer.templates import get_template, prepare_inputs
-from models.fast_streaming import FastBreezeStreamingRuntime, FastStreamingConfig
+from breeze_infer.templates import get_template, prepare_inputs, select_template_name
+from models.fast_streaming import (
+    FastBreezeStreamingRuntime,
+    FastStreamingChunk,
+    FastStreamingConfig,
+)
 from models.warmup_profile import load_warmup_profile
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -55,6 +61,45 @@ def _pcm16(audio: np.ndarray) -> bytes:
     audio = np.asarray(audio, dtype=np.float32)
     audio = np.clip(audio, -1.0, 1.0)
     return (audio * 32767.0).astype("<i2", copy=False).tobytes()
+
+
+def _iter_seeded_audio_chunks(
+    runtime: FastBreezeStreamingRuntime,
+    inputs: dict[str, object],
+    *,
+    request_id: str,
+    seed: int,
+) -> Iterator[FastStreamingChunk]:
+    """Reset sampling after preparation and expose opt-in token tracing."""
+    set_all_seeds(seed)
+    token_digest = None
+    token_frames = 0
+    if os.environ.get("BREEZE_DEBUG_TOKEN_HASH") == "1":
+        token_digest = hashlib.sha256()
+
+    def observe_token_frame(frame) -> None:
+        nonlocal token_frames
+        assert token_digest is not None
+        token_digest.update(
+            frame.detach().to(device="cpu").contiguous().numpy().tobytes()
+        )
+        token_frames += 1
+
+    try:
+        yield from runtime.iter_audio_chunks(
+            inputs,
+            request_id=request_id,
+            seed=seed,
+            token_observer=observe_token_frame if token_digest is not None else None,
+        )
+    finally:
+        if token_digest is not None:
+            print(
+                "breeze token trace: "
+                f"request_id={request_id} seed={seed} frames={token_frames} "
+                f"sha256={token_digest.hexdigest()}",
+                flush=True,
+            )
 
 
 async def _save_upload(upload: UploadFile) -> Path:
@@ -147,7 +192,7 @@ def health() -> JSONResponse:
 @app.post("/v1/audio/speech")
 async def speech(
     text: str = Form(...),
-    instruction: str = Form("Speak clearly and naturally."),
+    instruction: str | None = Form(None),
     cfg_scale: float = Form(DEFAULT_CFG_SCALE),
     ref_audio: UploadFile | None = OPTIONAL_AUDIO_FILE,
     ref_text: str = Form(""),
@@ -176,17 +221,18 @@ async def speech(
             reference_path = await _save_upload(ref_audio)
 
         request_id = f"api-{uuid.uuid4().hex}"
+        instruction = instruction.strip() if instruction else None
         request = {
             "id": request_id,
             "text": text,
-            "instruction": instruction,
             "speaker": "S0",
         }
-        template_name = "tts_instruction"
+        if instruction:
+            request["instruction"] = instruction
         if reference_path is not None:
             request["ref_audio_path"] = str(reference_path)
             request["ref_text"] = ref_text
-            template_name = "ref_edit_tata"
+        template_name = select_template_name(request)
 
         set_all_seeds(seed)
         inputs = prepare_inputs(
@@ -207,8 +253,11 @@ async def speech(
 
     def body() -> Iterator[bytes]:
         try:
-            for chunk in app.state.runtime.iter_audio_chunks(
-                inputs, request_id=request_id
+            for chunk in _iter_seeded_audio_chunks(
+                app.state.runtime,
+                inputs,
+                request_id=request_id,
+                seed=seed,
             ):
                 pcm = _pcm16(chunk.audio)
                 if pcm:

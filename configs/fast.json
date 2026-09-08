@@ -107,6 +107,30 @@
         {
           "batch_size": 2,
           "token_length": 512
+        },
+        {
+          "batch_size": 4,
+          "token_length": 32
+        },
+        {
+          "batch_size": 4,
+          "token_length": 64
+        },
+        {
+          "batch_size": 4,
+          "token_length": 96
+        },
+        {
+          "batch_size": 4,
+          "token_length": 128
+        },
+        {
+          "batch_size": 4,
+          "token_length": 160
+        },
+        {
+          "batch_size": 4,
+          "token_length": 256
         }
       ]
     },

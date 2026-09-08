@@ -150,6 +150,11 @@ def load_runtime(
     config.text_encoder_config.preferred_attn_implementation = (
         text_encoder_attn_implementation
     )
+    # This runtime intentionally keeps Breeze's custom streaming backbone on
+    # Eager while selecting the compatible backend independently for the
+    # nested T5Gemma2 text encoder. The model resolver still honors the normal
+    # top-level Transformers attention override when this field is absent.
+    config._text_encoder_attn_implementation = text_encoder_attn_implementation
     config.text_encoder_config._attn_implementation = text_encoder_attn_implementation
     model = BreezeForConditionalGeneration.from_pretrained(
         ckpt_dir,

@@ -1,8 +1,8 @@
 # T8star-Aix Voice Studio · Breeze TTS 2 整合项目路线图
 
-更新时间：2026-09-01
-上游代码基线：`breezeblue-ai/breeze-tts@ca632ce6c4d05f7985da4eab29b1a5d445b43f7b`
-官方模型基线：`BreezeBlue/Breeze-TTS-2@c1c8ca18b70b30822735633991d9ebf4898e47d4`
+更新时间：2026-09-09
+上游代码基线：`breezeblue-ai/breeze-tts@e2c5ac2f54fe15daa94237a7dbf31e446660a4c9`
+官方模型基线：`BreezeBlue/Breeze-TTS-2@799624c0b4a1daa8db6d28bbd9850043c0270734`
 
 ## 目标
 

@@ -19,6 +19,14 @@ def _package_version(name: str) -> str | None:
         return None
 
 
+def _native_bf16_supported(compute_capability: str) -> bool:
+    """Breeze's published BF16 runtime needs Ampere (SM80) or newer."""
+    try:
+        return int(str(compute_capability).split(".", 1)[0]) >= 8
+    except (TypeError, ValueError):
+        return False
+
+
 def _gpu_report() -> dict[str, Any]:
     try:
         completed = subprocess.run(
@@ -45,6 +53,7 @@ def _gpu_report() -> dict[str, Any]:
                         "memory_total_mib": int(float(values[2])),
                         "memory_free_mib": int(float(values[3])),
                         "compute_capability": values[4],
+                        "native_bf16_supported": _native_bf16_supported(values[4]),
                     }
                 )
         return {"available": bool(devices), "devices": devices}
