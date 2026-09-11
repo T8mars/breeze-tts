@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 
-PROJECT_VERSION = "0.3.4"
+PROJECT_VERSION = "0.3.5"
 CORE_REVISION = "e2c5ac2f54fe15daa94237a7dbf31e446660a4c9"
 MODEL_REPOSITORY = "BreezeBlue/Breeze-TTS-2"
 MODEL_REVISION = "799624c0b4a1daa8db6d28bbd9850043c0270734"
