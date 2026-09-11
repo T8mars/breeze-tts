@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 import uuid
 from collections.abc import Callable, Iterator
@@ -18,6 +19,8 @@ from .cudagraph.sampling import sample_logits
 from .warmup_profile import FastStreamingWarmupProfile
 
 FastCfgMode = Literal["no_cfg", "single_cfg"]
+TimingValue = float | int | bool | str
+LOGGER = logging.getLogger(__name__)
 
 _DUAL_CFG_KEYS = (
     "cfg_scale_ref",
@@ -61,7 +64,7 @@ class FastStreamingChunk:
     sample_rate: int
     codec_frames: int
     is_final: bool
-    timing: dict[str, float | int | bool] = field(default_factory=dict)
+    timing: dict[str, TimingValue] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -77,6 +80,17 @@ class _BranchBatch:
     attention_mask: torch.Tensor
     branch_batch_size: int
     cfg: FastCfgSelection
+
+
+@dataclass(frozen=True)
+class _BackbonePrefillResult:
+    hidden_states: torch.Tensor
+    logits: torch.Tensor
+    attention_mask: torch.Tensor
+    prefill_len: int
+    backend: Literal["cuda_graph", "eager", "eager_fallback"]
+    requested_graph_key: tuple[int, int] | None = None
+    fallback_reason: str | None = None
 
 
 def reject_dual_cfg(inputs: dict[str, Any]) -> None:
@@ -287,6 +301,85 @@ class FastBreezeStreamingRuntime:
         else:
             self._depth_decoder_graph.set_guidance_scale(guidance_scale)
 
+    @torch.inference_mode()
+    def _eager_backbone_prefill(
+        self,
+        inputs_embeds: torch.Tensor,
+        attention_mask: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, int, torch.Tensor]:
+        assert self._backbone_graph is not None
+        position_ids = attention_mask.long().cumsum(-1) - 1
+        position_ids.masked_fill_(attention_mask == 0, 1)
+        backbone_out = self.model.backbone_model(
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_values=None,
+            cache_position=None,
+            use_cache=True,
+        )
+        hidden_states = backbone_out.last_hidden_state
+        logits = self.model.lm_head(hidden_states[:, -1, :].float()).float()
+        prefill_len = self._backbone_graph.prefill_kv(backbone_out.past_key_values)
+        return hidden_states, logits, prefill_len, attention_mask
+
+    @torch.inference_mode()
+    def _run_backbone_prefill(
+        self, branch: _BranchBatch
+    ) -> _BackbonePrefillResult:
+        attention_mask = branch.attention_mask
+        if not self._fast_backbone_prefill:
+            hidden, logits, prefill_len, generation_mask = (
+                self._eager_backbone_prefill(branch.inputs_embeds, attention_mask)
+            )
+            return _BackbonePrefillResult(
+                hidden_states=hidden,
+                logits=logits,
+                attention_mask=generation_mask,
+                prefill_len=prefill_len,
+                backend="eager",
+            )
+
+        assert self._backbone_graph is not None
+        if self._backbone_prefill_graph is None:
+            self._backbone_prefill_graph = BackbonePrefillGraphCache(
+                self._backbone_graph, token_granularity=32
+            )
+        cache = self._backbone_prefill_graph
+        requested_key = cache.graph_key(
+            branch_batch_size=branch.branch_batch_size,
+            sequence_length=int(branch.inputs_embeds.shape[1]),
+        )
+        if cache.frozen and not cache.has_graph_key(requested_key):
+            fallback_reason = "missing_frozen_cuda_graph"
+            LOGGER.warning(
+                "Backbone prefill CUDA graph %s is not in the frozen warmup profile; "
+                "using eager prefill while keeping the remaining fast stages enabled.",
+                requested_key,
+            )
+            hidden, logits, prefill_len, generation_mask = (
+                self._eager_backbone_prefill(branch.inputs_embeds, attention_mask)
+            )
+            return _BackbonePrefillResult(
+                hidden_states=hidden,
+                logits=logits,
+                attention_mask=generation_mask,
+                prefill_len=prefill_len,
+                backend="eager_fallback",
+                requested_graph_key=requested_key,
+                fallback_reason=fallback_reason,
+            )
+
+        output = cache(branch.inputs_embeds, attention_mask)
+        return _BackbonePrefillResult(
+            hidden_states=output.hidden_states,
+            logits=output.logits,
+            attention_mask=output.attention_mask,
+            prefill_len=output.prefill_len,
+            backend="cuda_graph",
+            requested_graph_key=requested_key,
+        )
+
     def _codec(self):
         if self._codec_runtime is not None:
             return self._codec_runtime
@@ -456,7 +549,7 @@ class FastBreezeStreamingRuntime:
         request_id: str,
         reset: bool,
         is_final: bool,
-        timing: dict[str, float | int | bool],
+        timing: dict[str, TimingValue],
     ) -> FastStreamingChunk:
         frame_tensor = torch.stack(frames).to(self.device, dtype=torch.long)
         codes = frame_tensor.transpose(0, 1).unsqueeze(0).contiguous()
@@ -794,38 +887,11 @@ class FastBreezeStreamingRuntime:
             prefill_start_event.record()
 
         try:
-            attention_mask = branch.attention_mask
-            if self._fast_backbone_prefill:
-                if self._backbone_prefill_graph is None:
-                    self._backbone_prefill_graph = BackbonePrefillGraphCache(
-                        self._backbone_graph, token_granularity=32
-                    )
-                prefill_output = self._backbone_prefill_graph(
-                    branch.inputs_embeds, attention_mask
-                )
-                hidden = prefill_output.hidden_states
-                logits = prefill_output.logits
-                prefill_len = prefill_output.prefill_len
-                generation_attention_mask = prefill_output.attention_mask
-            else:
-                position_ids = attention_mask.long().cumsum(-1) - 1
-                position_ids.masked_fill_(attention_mask == 0, 1)
-                prefill_cache = None
-                cache_position = None
-                backbone_out = self.model.backbone_model(
-                    inputs_embeds=branch.inputs_embeds,
-                    attention_mask=attention_mask,
-                    position_ids=position_ids,
-                    past_key_values=prefill_cache,
-                    cache_position=cache_position,
-                    use_cache=True,
-                )
-                hidden = backbone_out.last_hidden_state
-                logits = self.model.lm_head(hidden[:, -1, :].float()).float()
-                prefill_len = self._backbone_graph.prefill_kv(
-                    backbone_out.past_key_values
-                )
-                generation_attention_mask = attention_mask
+            prefill_output = self._run_backbone_prefill(branch)
+            hidden = prefill_output.hidden_states
+            logits = prefill_output.logits
+            prefill_len = prefill_output.prefill_len
+            generation_attention_mask = prefill_output.attention_mask
 
             if branch.branch_batch_size == 2:
                 cond_logits = logits[:1]
@@ -881,13 +947,25 @@ class FastBreezeStreamingRuntime:
                         frames = chunk_buffer
                         chunk_buffer = []
                         total_frames += len(frames)
-                        timing: dict[str, float | int | bool] = {
+                        timing: dict[str, TimingValue] = {
                             "chunk_index": chunk_index,
                             "codec_frames": len(frames),
                             "decode_launch_ms": (decode_started - t_chunk) * 1000.0,
                             "total_frames": total_frames,
                             "is_final": reached_limit,
+                            "backbone_prefill_backend": prefill_output.backend,
                         }
+                        if prefill_output.requested_graph_key is not None:
+                            timing["backbone_prefill_branch_batch_size"] = (
+                                prefill_output.requested_graph_key[0]
+                            )
+                            timing["backbone_prefill_bucket"] = (
+                                prefill_output.requested_graph_key[1]
+                            )
+                        if prefill_output.fallback_reason is not None:
+                            timing["backbone_prefill_fallback_reason"] = (
+                                prefill_output.fallback_reason
+                            )
                         chunk = self._decode_codec_frames(
                             frames=frames,
                             request_id=request_id,

@@ -593,12 +593,39 @@ class RuntimeManager:
                         )
                         segment_samples = 0
                         anchor_chunks: list[np.ndarray] = []
+                        segment_prefill_backend = (
+                            "cuda_graph" if request.fast_all else "eager"
+                        )
+                        segment_prefill_branch_batch_size: int | None = None
+                        segment_prefill_bucket: int | None = None
+                        segment_prefill_fallback_reason: str | None = None
                         for chunk in runtime.iter_audio_chunks(
                             inputs,
                             request_id=payload["id"],
                             seed=segment_seed,
                         ):
                             self._raise_if_cancelled(cancel_event)
+                            chunk_timing = getattr(chunk, "timing", {}) or {}
+                            prefill_backend = chunk_timing.get(
+                                "backbone_prefill_backend"
+                            )
+                            if isinstance(prefill_backend, str) and prefill_backend:
+                                segment_prefill_backend = prefill_backend
+                            branch_batch_size = chunk_timing.get(
+                                "backbone_prefill_branch_batch_size"
+                            )
+                            if isinstance(branch_batch_size, int):
+                                segment_prefill_branch_batch_size = branch_batch_size
+                            prefill_bucket = chunk_timing.get(
+                                "backbone_prefill_bucket"
+                            )
+                            if isinstance(prefill_bucket, int):
+                                segment_prefill_bucket = prefill_bucket
+                            fallback_reason = chunk_timing.get(
+                                "backbone_prefill_fallback_reason"
+                            )
+                            if isinstance(fallback_reason, str) and fallback_reason:
+                                segment_prefill_fallback_reason = fallback_reason
                             audio = np.asarray(chunk.audio, dtype=np.float32).reshape(-1)
                             if audio.size == 0:
                                 continue
@@ -622,6 +649,12 @@ class RuntimeManager:
                                 "voice_anchor": "source" if segment_index == 0 and voice_lock_enabled else (
                                     "first_segment" if voice_lock_enabled else "reference" if request.ref_audio_path else "none"
                                 ),
+                                "backbone_prefill": {
+                                    "backend": segment_prefill_backend,
+                                    "branch_batch_size": segment_prefill_branch_batch_size,
+                                    "bucket": segment_prefill_bucket,
+                                    "fallback_reason": segment_prefill_fallback_reason,
+                                },
                             }
                         )
                         if voice_lock_enabled and segment_index == 0:
@@ -663,6 +696,11 @@ class RuntimeManager:
                 raise RuntimeError("模型没有生成有效音频。")
             elapsed = time.perf_counter() - started
             duration = total_samples / float(sample_rate)
+            backbone_prefill_fallback_count = sum(
+                1
+                for segment in segment_metadata
+                if segment["backbone_prefill"]["backend"] == "eager_fallback"
+            )
             metadata = {
                 "mode": request.mode,
                 "seed": request.seed,
@@ -678,6 +716,7 @@ class RuntimeManager:
                 "dry_samples": dry_samples,
                 "segment_count": len(segment_metadata),
                 "segments": segment_metadata,
+                "backbone_prefill_fallback_count": backbone_prefill_fallback_count,
                 "voice_lock": {
                     "enabled": voice_lock_enabled,
                     "anchor_created": anchor_created,

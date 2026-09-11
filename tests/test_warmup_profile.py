@@ -29,6 +29,16 @@ def test_bundled_config_covers_cfg1_cfg4_and_voice_direction() -> None:
         2,
     }
     assert {graph.batch_size for graph in profile.text_encoder_graphs} == {1, 2, 4}
+    cfg1_prefill_lengths = [
+        graph.sequence_length
+        for graph in profile.backbone_prefill_graphs
+        if graph.branch_batch_size == 1
+    ]
+    cfg_guided_prefill_lengths = [
+        graph.sequence_length
+        for graph in profile.backbone_prefill_graphs
+        if graph.branch_batch_size == 2
+    ]
     cfg1_text_lengths = [
         graph.token_length
         for graph in profile.text_encoder_graphs
@@ -47,6 +57,8 @@ def test_bundled_config_covers_cfg1_cfg4_and_voice_direction() -> None:
     assert cfg1_text_lengths == list(range(32, 257, 32))
     assert cfg_guided_text_lengths == list(range(32, 513, 32))
     assert voice_direction_text_lengths == [32, 64, 96, 128, 160, 256]
+    assert cfg1_prefill_lengths == list(range(32, 513, 32))
+    assert cfg_guided_prefill_lengths == list(range(32, 513, 32))
 
 
 def test_config_requires_decode_graph_for_each_cfg_shape() -> None:

@@ -8,7 +8,9 @@ import torch
 from breeze_infer.templates import get_template
 from models.fast_streaming import (
     FastBreezeStreamingRuntime,
+    FastCfgSelection,
     FastStreamingConfig,
+    _BranchBatch,
     _get_dtype,
     is_backbone_eos_token,
     is_terminal_pad_frame,
@@ -16,6 +18,105 @@ from models.fast_streaming import (
     select_fast_cfg,
     should_decode_codec_frame,
 )
+
+
+def test_missing_frozen_prefill_graph_falls_back_without_disabling_fast_decode() -> None:
+    hidden = torch.zeros(1, 513, 2)
+    logits = torch.zeros(1, 8)
+    attention_mask = torch.ones(1, 513, dtype=torch.long)
+
+    class FrozenCache:
+        frozen = True
+
+        @staticmethod
+        def graph_key(*, branch_batch_size: int, sequence_length: int):
+            bucket = ((sequence_length + 31) // 32) * 32
+            return (branch_batch_size, bucket)
+
+        @staticmethod
+        def has_graph_key(key):
+            return False
+
+        def __call__(self, *_args, **_kwargs):
+            raise AssertionError("missing frozen graph must not be replayed")
+
+    runtime = object.__new__(FastBreezeStreamingRuntime)
+    runtime._fast_backbone_prefill = True
+    runtime._fast_backbone_decode = True
+    runtime._fast_depth_decoder = True
+    runtime._fast_codec = True
+    runtime._backbone_graph = object()
+    runtime._backbone_prefill_graph = FrozenCache()
+    runtime._eager_backbone_prefill = lambda *_args: (
+        hidden,
+        logits,
+        513,
+        attention_mask,
+    )
+    branch = _BranchBatch(
+        inputs_embeds=torch.zeros(1, 513, 2),
+        attention_mask=attention_mask,
+        branch_batch_size=1,
+        cfg=FastCfgSelection("no_cfg", 1.0, False),
+    )
+
+    result = runtime._run_backbone_prefill(branch)
+
+    assert result.backend == "eager_fallback"
+    assert result.requested_graph_key == (1, 544)
+    assert result.fallback_reason == "missing_frozen_cuda_graph"
+    assert result.prefill_len == 513
+    assert runtime._fast_backbone_decode is True
+    assert runtime._fast_depth_decoder is True
+    assert runtime._fast_codec is True
+
+
+def test_declared_288_prefill_graph_is_replayed_without_eager_fallback() -> None:
+    hidden = torch.zeros(1, 288, 2)
+    logits = torch.zeros(1, 8)
+    attention_mask = torch.ones(1, 288, dtype=torch.long)
+
+    class FrozenCache:
+        frozen = True
+        calls = 0
+
+        @staticmethod
+        def graph_key(*, branch_batch_size: int, sequence_length: int):
+            return (branch_batch_size, ((sequence_length + 31) // 32) * 32)
+
+        @staticmethod
+        def has_graph_key(key):
+            return key == (1, 288)
+
+        def __call__(self, *_args, **_kwargs):
+            self.calls += 1
+            return SimpleNamespace(
+                hidden_states=hidden,
+                logits=logits,
+                attention_mask=attention_mask,
+                prefill_len=288,
+            )
+
+    runtime = object.__new__(FastBreezeStreamingRuntime)
+    runtime._fast_backbone_prefill = True
+    runtime._backbone_graph = object()
+    runtime._backbone_prefill_graph = FrozenCache()
+    runtime._eager_backbone_prefill = lambda *_args: (_ for _ in ()).throw(
+        AssertionError("declared graph must not use eager prefill")
+    )
+    branch = _BranchBatch(
+        inputs_embeds=torch.zeros(1, 257, 2),
+        attention_mask=torch.ones(1, 257, dtype=torch.long),
+        branch_batch_size=1,
+        cfg=FastCfgSelection("no_cfg", 1.0, False),
+    )
+
+    result = runtime._run_backbone_prefill(branch)
+
+    assert result.backend == "cuda_graph"
+    assert result.requested_graph_key == (1, 288)
+    assert result.fallback_reason is None
+    assert runtime._backbone_prefill_graph.calls == 1
 
 
 def test_runtime_dtype_follows_backbone_after_shared_lm_head_is_cast() -> None:

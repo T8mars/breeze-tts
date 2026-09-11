@@ -1018,8 +1018,12 @@ async function generate() {
       $("openOutputButton").hidden = false;
       state.outputDirectory = message.metadata.output.replace(/[\\/][^\\/]+$/, "");
       $("generationMeta").textContent = JSON.stringify(message.metadata, null, 2);
-      $("generationStatus").textContent = "生成完成";
-      setGlobalTask({ kind: "success", kicker: "单句生成", title: "生成完成", detail: `已保存 ${message.output}`, progress: 100, target: "generate" });
+      const prefillFallbackCount = Number(message.metadata?.backbone_prefill_fallback_count || 0);
+      const completionTitle = prefillFallbackCount > 0
+        ? `生成完成（${prefillFallbackCount} 段 Prefill 自动回退 Eager）`
+        : "生成完成";
+      $("generationStatus").textContent = completionTitle;
+      setGlobalTask({ kind: "success", kicker: "单句生成", title: completionTitle, detail: `已保存 ${message.output}`, progress: 100, target: "generate" });
     } else if (message.type === "error") {
       $("generationStatus").textContent = `失败：${message.message}`;
       $("generationMeta").textContent = `${message.error_type}: ${message.message}`;

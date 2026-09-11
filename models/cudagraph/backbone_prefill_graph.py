@@ -53,6 +53,19 @@ class BackbonePrefillGraphCache:
             (int(length) + self.token_granularity - 1) // self.token_granularity
         ) * self.token_granularity
 
+    def graph_key(
+        self, *, branch_batch_size: int, sequence_length: int
+    ) -> tuple[int, int]:
+        return (int(branch_batch_size), self._bucket(int(sequence_length)))
+
+    def has_graph_key(self, key: tuple[int, int]) -> bool:
+        with self._lock:
+            return key in self._records
+
+    @property
+    def frozen(self) -> bool:
+        return self._frozen
+
     @staticmethod
     def _copy_inputs(
         inputs_embeds: torch.Tensor,
@@ -129,7 +142,9 @@ class BackbonePrefillGraphCache:
                 f"prefill bucket {bucket_len} exceeds max_seq_len "
                 f"{self.backbone_graph.max_seq_len}"
             )
-        key = (int(batch_size), bucket_len)
+        key = self.graph_key(
+            branch_batch_size=int(batch_size), sequence_length=int(seq_len)
+        )
 
         with self._lock:
             record = self._records.get(key)

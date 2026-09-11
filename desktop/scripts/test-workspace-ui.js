@@ -156,6 +156,7 @@ test("Fast All reports Triton readiness and safely falls back to Eager", () => {
   assert.match(renderer, /Fast All \/ Triton/);
   assert.match(renderer, /fastOption\.disabled = !fastAllReady/);
   assert.match(renderer, /runtime\.fast_all_fallback_reason/);
+  assert.match(renderer, /backbone_prefill_fallback_count/);
 });
 
 test("FlashAttention readiness and active text-encoder backend are visible", () => {

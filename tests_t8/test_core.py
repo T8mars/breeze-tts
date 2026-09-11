@@ -199,7 +199,15 @@ def test_clone_generation_uses_reference_only_template_and_sampling_seed(
     manager._runtime = SimpleNamespace(
         sample_rate=24_000,
         iter_audio_chunks=lambda _inputs, **kwargs: sampled.append(kwargs) or iter([
-            SimpleNamespace(audio=np.full(1200, 0.1, dtype=np.float32))
+            SimpleNamespace(
+                audio=np.full(1200, 0.1, dtype=np.float32),
+                timing={
+                    "backbone_prefill_backend": "eager_fallback",
+                    "backbone_prefill_branch_batch_size": 1,
+                    "backbone_prefill_bucket": 544,
+                    "backbone_prefill_fallback_reason": "missing_frozen_cuda_graph",
+                },
+            )
         ]),
     )
     monkeypatch.setattr(manager, "load", lambda **_kwargs: None)
@@ -231,6 +239,7 @@ def test_clone_generation_uses_reference_only_template_and_sampling_seed(
             ref_audio_path=reference,
             ref_text="参考文本。",
             seed=73,
+            fast_all=True,
         )
     )
 
@@ -239,6 +248,13 @@ def test_clone_generation_uses_reference_only_template_and_sampling_seed(
     assert sampled[0]["request_id"]
     assert sampled[0]["seed"] == 73
     assert metadata["segments"][0]["template"] == "ref_clone_tata"
+    assert metadata["segments"][0]["backbone_prefill"] == {
+        "backend": "eager_fallback",
+        "branch_batch_size": 1,
+        "bucket": 544,
+        "fallback_reason": "missing_frozen_cuda_graph",
+    }
+    assert metadata["backbone_prefill_fallback_count"] == 1
 
 
 def test_model_download_requires_license_acceptance(tmp_path):
