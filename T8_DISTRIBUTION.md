@@ -25,6 +25,8 @@ The build creates a private portable CPython 3.10 runtime, installs official Bre
 
 ## Install the ComfyUI nodes
 
+The standalone node package is now **0.3.7**, fixing CPU/CUDA tensor mismatches after repeated runs or memory offloading (Issue #2), including the scaled text embedding, depth codebook head, codec residency, and CUDA Graph recapture. Update the nodes and restart ComfyUI. This node-only patch does not replace the **0.3.6** desktop portable distribution.
+
 Install **Breeze TTS 2 · T8star-Aix** through ComfyUI-Manager, or clone `https://github.com/T8mars/Comfyui-breeze-tts` into `ComfyUI/custom_nodes/` and install `requirements.txt` with the ComfyUI Python. Dependencies use the official Manager pipeline; the node contains no runtime pip subprocess and does not declare Torch, Torchaudio, Transformers, Tokenizers, or NumPy. The loader validates Transformers `>=4.57,<6` and downloads the fixed official model revision into `ComfyUI/models/breeze_tts/BreezeBlue_Breeze-TTS-2` after explicit license acceptance. The desktop app instead defaults to `%APPDATA%\T8star-Aix Voice Studio\models\Breeze-TTS-2`; these paths are intentionally independent.
 
 The ComfyUI ZIP is not a standalone application and intentionally contains no launcher. It must be installed into an existing ComfyUI. The separately built `T8star-Aix-Voice-Studio-vX.Y.Z-SelfExtract.exe` is the Windows desktop bundle with its own `T8star-Aix-Voice-Studio.exe` launcher.

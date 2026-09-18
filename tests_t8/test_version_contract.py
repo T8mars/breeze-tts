@@ -17,7 +17,7 @@ def _toml_project_version(text: str) -> str:
     return match.group(1)
 
 
-def test_release_version_is_consistent_across_desktop_backend_and_comfy() -> None:
+def test_desktop_and_node_release_versions_are_internally_consistent() -> None:
     desktop_package = json.loads((ROOT / "desktop" / "package.json").read_text(encoding="utf-8"))
     desktop_version = desktop_package["version"]
     lock_package = json.loads((ROOT / "desktop" / "package-lock.json").read_text(encoding="utf-8"))
@@ -27,7 +27,14 @@ def test_release_version_is_consistent_across_desktop_backend_and_comfy() -> Non
     comfy_entrypoint = (ROOT / "comfyui-breeze-tts-T8" / "__init__.py").read_text(encoding="utf-8")
     desktop_html = (ROOT / "desktop" / "src" / "index.html").read_text(encoding="utf-8")
 
-    assert desktop_version == PROJECT_VERSION == comfy_version
+    assert desktop_version == PROJECT_VERSION
+    # Standalone node fixes can advance the patch version without rebuilding
+    # the unrelated desktop distribution. Keep the same compatibility series.
+    desktop_parts = tuple(map(int, desktop_version.split(".")))
+    comfy_parts = tuple(map(int, comfy_version.split(".")))
+    assert len(desktop_parts) == len(comfy_parts) == 3
+    assert comfy_parts[:2] == desktop_parts[:2]
+    assert comfy_parts[2] >= desktop_parts[2]
     assert lock_package["version"] == desktop_version
     assert lock_package["packages"][""]["version"] == desktop_version
     assert f'__version__ = "{comfy_version}"' in comfy_entrypoint
