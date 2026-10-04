@@ -22,6 +22,8 @@ def main() -> None:
     parser.add_argument("--engine", choices=("whisper", "confucius"), default="confucius")
     parser.add_argument("--browser-channel", default=None,
         help="Optional installed browser channel; defaults to Playwright Chromium.")
+    parser.add_argument("--isolate-runtime", action="store_true",
+        help="Remove host Python/CUDA settings and keep only bundled Python plus Windows system PATH.")
     args = parser.parse_args()
     from playwright.sync_api import sync_playwright
     root = args.project_root.resolve()
@@ -31,6 +33,14 @@ def main() -> None:
             sock.bind(("127.0.0.1", 0))
             port = sock.getsockname()[1]
         env = {**os.environ, "T8_BREEZE_DATA_DIR": temporary, "PYTHONPATH": str(root), "PYTHONUTF8": "1"}
+        env.pop("PYTHONHOME", None)
+        if args.isolate_runtime:
+            for name in list(env):
+                if name.startswith("CUDA_PATH") or name in ("VIRTUAL_ENV", "PYTHONUSERBASE"):
+                    env.pop(name)
+            windows = Path(env.get("SYSTEMROOT", r"C:\Windows"))
+            env["PATH"] = os.pathsep.join(map(str, (args.python.resolve().parent, windows / "System32", windows)))
+            env["PYTHONNOUSERSITE"] = "1"
         log = (args.report_directory / "backend.log").open("w", encoding="utf-8")
         server = subprocess.Popen([str(args.python), "-m", "t8_runtime.server", "--port", str(port)],
             cwd=root, env=env, stdout=log, stderr=subprocess.STDOUT, creationflags=subprocess.CREATE_NO_WINDOW)
@@ -93,6 +103,7 @@ def main() -> None:
                 assert not errors, errors
                 browser.close()
                 report = {f"generation_{args.engine}": True, f"voice_library_{args.engine}": True,
+                    "server_runtime_isolated": args.isolate_runtime,
                     "manual_transcript_verification_preserved": True, "path_save": True,
                     "mobile_no_horizontal_overflow": True, "page_errors": errors}
                 (args.report_directory / "result.json").write_text(json.dumps(report, indent=2), encoding="utf-8")

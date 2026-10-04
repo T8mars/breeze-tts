@@ -13,6 +13,8 @@ Desktop **0.3.8** adds offline Confucius4-R2T2 Q8 alongside Whisper Large-v3, wi
 
 Both model directories can be saved or reset in **Settings & diagnostics → Transcription engines and model paths**. Confucius takes a directory containing the exact Q8 GGUF/model-projector pair; custom `FireRedVAD-ONNX/` is optional if bundled VAD is available. Whisper takes a CTranslate2 Large-v3 directory. A broken custom path fails explicitly instead of downloading another model. Confucius hotwords/context apply to generation-page and voice-library drafts. ASR unloads TTS first and releases its own model afterwards; the next TTS request reloads automatically. Confucius is CUDA-only and does not fabricate subtitle timestamps or translate languages.
 
+Desktop 0.3.8 acceptance on RTX 5090 Laptop verified real CUDA inference for both engines using custom directories containing spaces. A 94.17-second Confucius recording completed segmented offline recognition in 24.09 seconds; its boundary/quality flags remain a request for manual review, not a claim of exact subtitle alignment. ASR's residual VRAM difference was 2 MiB, subsequent Breeze generation verified both the model and audio codec on `cuda:0`, and forced backend termination also stopped the worker. Both UI entry points, manual transcript confirmation and mobile settings layout passed browser acceptance; the packaged Confucius test removed host Python/CUDA settings and used only bundled Python plus Windows system paths.
+
 For low disk space, `build_portable.ps1`, `build_self_extract.ps1` and `build_release.ps1` accept `-OutputRoot <dedicated-build-directory>`; only this version's explicitly resolved outputs are cleared. Do not point it at a filesystem root.
 
 Use 64-bit PowerShell on Windows:

@@ -10,6 +10,7 @@ import ctypes
 from contextlib import contextmanager
 import hashlib
 import json
+import logging
 import os
 from pathlib import Path
 import sys
@@ -25,6 +26,9 @@ def preserve_worker_log(data: Path, report: Path):
     try:
         yield
     finally:
+        # Windows cannot remove the temporary directory while the backend's
+        # global rotating FileHandler still owns backend.log.
+        logging.shutdown()
         source = data / "logs/confucius-worker.log"
         if source.is_file():
             report.parent.mkdir(parents=True, exist_ok=True)
@@ -106,8 +110,10 @@ def main() -> None:
                 target, meta = app.state.runtime.generate(GenerationRequest(mode="design", text="你好，欢迎使用。",
                     instruction="自然清晰的中文声音", cfg_scale=1, seed=7))
                 assert target.is_file() and meta["duration_seconds"] > 0
+                device_report = app.state.runtime.status()["compute_device"]
+                assert device_report["device"] == "cuda:0", device_report
                 report["tts_after_asr"] = {"duration_seconds": meta["duration_seconds"],
-                    "device": app.state.runtime.status().get("device_report"), "success": True}
+                    "device": device_report, "success": True}
                 app.state.runtime.unload()
         # Desktop Windows shutdown uses TerminateProcess, not Python atexit.
         # Verify the worker's parent-death watcher against that actual failure.
