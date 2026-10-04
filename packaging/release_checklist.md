@@ -1,5 +1,19 @@
 # Release checklist
 
+## Desktop 0.3.8 dual-ASR acceptance
+
+- [x] Both ComfyUI node source trees stay unchanged; Confucius source is vendored at its pinned commit.
+- [x] Python/desktop regressions cover engine selection, path validation/persistence, VRAM lifecycle and draft verification.
+- [x] Hugging Face model READMEs are updated without uploading duplicate weights.
+- [ ] Native CUDA fatbins contain all requested architectures (75/80/86/89/90/100/120).
+- [ ] Portable Python 3.12, native/CUDA/VC libraries, licenses and full file inventory pass verification.
+- [ ] Real GPU transcription passes for both engines, custom paths and long segmented Confucius audio.
+- [ ] ASR releases VRAM; subsequent Breeze TTS and terminated-parent worker cleanup pass.
+- [ ] Both UI entry points and mobile settings layout pass live-backend browser acceptance.
+- [ ] New portable ZIP/SFX are verified and GitHub Release assets are published.
+
+## Previous release baseline (0.3.6 / node 0.3.7)
+
 - [x] `roadmap.md` scope and version are current.
 - [x] Official source revision and model revision are pinned.
 - [x] Model manifest passes full size and SHA-256 verification.

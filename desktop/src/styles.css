@@ -325,6 +325,16 @@ pre { max-height: 230px; overflow: auto; white-space: pre-wrap; word-break: brea
 .role-mapping-panel { display: grid; gap: 8px; margin-top: 12px; }
 .role-mapping-row { display: grid; grid-template-columns: minmax(100px, 0.6fr) 1.4fr; gap: 10px; align-items: center; }
 .whisper-row { display: grid; grid-template-columns: 1fr 1fr auto; margin-top: 8px; }
+.whisper-row select { min-width: 0; width: 100%; }
+.voice-asr-row { grid-template-columns: minmax(0, 1fr) auto; }
+.asr-settings { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.asr-settings > strong, .asr-settings > p { grid-column: 1 / -1; }
+@media (max-width: 760px) {
+  .asr-settings { grid-template-columns: minmax(0, 1fr); }
+  .whisper-row { grid-template-columns: minmax(0, 1fr) 80px; }
+  .whisper-row button { grid-column: 1 / -1; width: 100%; }
+  .voice-asr-row { grid-template-columns: minmax(0, 1fr); }
+}
 footer { padding: 26px 10px 0; color: var(--muted); text-align: center; font-size: 0.78rem; }
 dialog { width: min(900px, calc(100% - 48px)); max-height: 80vh; border: 1px solid var(--border); border-radius: 14px; color: var(--text); background: var(--surface); box-shadow: 0 24px 80px rgba(15, 23, 42, 0.2); }
 dialog::backdrop { background: rgba(15, 23, 42, 0.35); }

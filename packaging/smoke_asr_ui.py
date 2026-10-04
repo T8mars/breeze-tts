@@ -19,6 +19,9 @@ def main() -> None:
     parser.add_argument("--python", type=Path, required=True)
     parser.add_argument("--audio", type=Path, required=True)
     parser.add_argument("--report-directory", type=Path, required=True)
+    parser.add_argument("--engine", choices=("whisper", "confucius"), default="confucius")
+    parser.add_argument("--browser-channel", default=None,
+        help="Optional installed browser channel; defaults to Playwright Chromium.")
     args = parser.parse_args()
     from playwright.sync_api import sync_playwright
     root = args.project_root.resolve()
@@ -46,48 +49,50 @@ def main() -> None:
             else:
                 raise RuntimeError("UI backend startup timed out")
             with sync_playwright() as playwright:
-                browser = playwright.chromium.launch(channel="chrome", headless=True)
+                browser = playwright.chromium.launch(channel=args.browser_channel, headless=True)
                 page = browser.new_page(viewport={"width": 1366, "height": 900})
                 errors = []
                 page.on("pageerror", lambda error: errors.append(str(error)))
                 page.goto(base)
-                page.wait_for_function("state.capabilities.confucius === true")
+                page.wait_for_function("engine => state.capabilities[engine] === true", arg=args.engine)
                 # Only expose the ASR workbench for this component test; no TTS
                 # generation or license acknowledgement is bypassed in the app.
-                page.evaluate("document.getElementById('studioView').hidden=false; document.getElementById('launcherView').hidden=true")
+                page.evaluate("() => { document.getElementById('studioView').hidden=false; document.getElementById('launcherView').hidden=true; }")
                 page.locator('[data-mode="clone"]').click()
                 page.locator("#referenceAudio").set_input_files(args.audio)
-                page.locator("#whisperModel").select_option("confucius")
+                page.locator("#whisperModel").select_option("large-v3" if args.engine == "whisper" else "confucius")
                 page.locator("#transcribeButton").click()
-                page.wait_for_function("!document.getElementById('whisperDraftPanel').hidden", timeout=180000)
+                page.wait_for_function("() => !document.getElementById('whisperDraftPanel').hidden", timeout=180000)
                 assert page.locator("#whisperDraftText").input_value().strip()
                 assert page.locator("#referenceText").input_value() == ""
                 assert not page.locator("#referenceTranscriptVerified").is_checked()
-                assert "0%" not in page.locator("#whisperDraftQuality").inner_text()
+                assert "语言置信度 0%" not in page.locator("#whisperDraftQuality").inner_text()
                 page.locator("#applyWhisperDraftButton").click()
                 assert page.locator("#referenceText").input_value().strip()
                 assert not page.locator("#referenceTranscriptVerified").is_checked()
-                page.screenshot(path=str(args.report_directory / "generation-confucius.png"), full_page=True)
+                page.screenshot(path=str(args.report_directory / f"generation-{args.engine}.png"), full_page=True)
                 page.locator("#workspaceTabVoices").click()
                 page.locator("#voiceReferenceAudio").set_input_files(args.audio)
-                page.locator("#voiceAsrEngine").select_option("confucius")
+                page.locator("#voiceAsrEngine").select_option(args.engine)
                 page.locator("#voiceTranscribeButton").click()
-                page.wait_for_function("!document.getElementById('voiceWhisperDraftPanel').hidden", timeout=180000)
+                page.wait_for_function("() => !document.getElementById('voiceWhisperDraftPanel').hidden", timeout=180000)
                 assert page.locator("#voiceWhisperDraftText").input_value().strip()
                 assert page.locator("#voiceReferenceText").input_value() == ""
                 assert not page.locator("#voiceTranscriptVerified").is_checked()
                 page.locator("#workspaceTabSettings").click()
-                custom_path = page.locator("#confuciusModelPath").input_value()
-                page.locator("#saveConfuciusPathButton").click()
-                page.wait_for_function("document.getElementById('asrSettingsStatus').textContent.includes('路径已保存')")
-                assert page.locator("#confuciusModelPath").input_value() == custom_path
+                model_field = "#whisperModelPath" if args.engine == "whisper" else "#confuciusModelPath"
+                save_button = "#saveWhisperPathButton" if args.engine == "whisper" else "#saveConfuciusPathButton"
+                custom_path = page.locator(model_field).input_value()
+                page.locator(save_button).click()
+                page.wait_for_function("() => document.getElementById('asrSettingsStatus').textContent.includes('路径已保存')")
+                assert page.locator(model_field).input_value() == custom_path
                 page.screenshot(path=str(args.report_directory / "settings-desktop.png"), full_page=True)
                 page.set_viewport_size({"width": 390, "height": 844})
-                assert page.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 2")
+                assert page.evaluate("() => document.documentElement.scrollWidth <= window.innerWidth + 2")
                 page.screenshot(path=str(args.report_directory / "settings-mobile.png"), full_page=True)
                 assert not errors, errors
                 browser.close()
-                report = {"generation_confucius": True, "voice_library_confucius": True,
+                report = {f"generation_{args.engine}": True, f"voice_library_{args.engine}": True,
                     "manual_transcript_verification_preserved": True, "path_save": True,
                     "mobile_no_horizontal_overflow": True, "page_errors": errors}
                 (args.report_directory / "result.json").write_text(json.dumps(report, indent=2), encoding="utf-8")

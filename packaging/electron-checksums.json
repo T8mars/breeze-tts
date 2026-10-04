@@ -1,4 +1,10 @@
 {
+  "43.7.7": {
+    "win32-x64": {
+      "file": "electron-v43.7.7-win32-x64.zip",
+      "sha256": "97dcb75065444ef031b9b6ea814ccd2109b97934fffb0c503a555d4737ca79cc"
+    }
+  },
   "43.3.0": {
     "win32-x64": {
       "file": "electron-v43.3.0-win32-x64.zip",

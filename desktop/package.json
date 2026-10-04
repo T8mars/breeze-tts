@@ -8,7 +8,7 @@
   "license": "Apache-2.0",
   "private": true,
   "engines": {
-    "node": ">=22.12.0"
+    "node": ">=22.13.0"
   },
   "scripts": {
     "start": "electron-forge start",
@@ -20,9 +20,9 @@
     "verify:distribution": "node ../packaging/verify_forge_config.js"
   },
   "devDependencies": {
-    "@electron-forge/cli": "7.11.2",
-    "@electron-forge/maker-zip": "7.11.2",
-    "electron": "43.3.0"
+    "@electron-forge/cli": "8.0.1",
+    "@electron-forge/maker-zip": "8.0.1",
+    "electron": "43.7.7"
   },
   "overrides": {
     "extract-zip": "npm:@electron-internal/extract-zip@1.0.5",

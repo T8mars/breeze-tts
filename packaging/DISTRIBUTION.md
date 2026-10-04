@@ -12,6 +12,10 @@ repository or update server is hard-coded.
 Run from the repository root in PowerShell:
 
 ```powershell
+# Build Confucius native libraries from the pinned source with CUDA architectures
+# 75;80;86;89;90;100;120, then prepare the independent Python 3.12 worker:
+.\packaging\prepare_confucius.ps1 -SourceRoot 'D:\Confucius4-R2T2' -NativeBuildDir 'D:\Confucius4-R2T2\build-native'
+
 # Existing portable ZIP only
 .\packaging\build_portable.ps1
 
@@ -19,12 +23,17 @@ Run from the repository root in PowerShell:
 .\packaging\build_release.ps1
 ```
 
-Use Node.js 22.12 or newer; CI builds with Node 22 and `npm ci` from the committed
+Use Node.js 22.13 or newer; CI builds with Node 22 and `npm ci` from the committed
 lockfile.
 
 The full build is intentionally large and may take a long time because the bundled
 Python/CUDA runtime is copied and compressed. The self-extract target requires a
-local 7-Zip 25.x installation. The model weights remain excluded.
+local 7-Zip 25.x installation. Licensed Breeze TTS weights remain excluded;
+Whisper Large-v3, the pinned Confucius Q8 GGUF pair and FireRedVAD are bundled.
+Preparation verifies source and model hashes, actual native CUDA architectures,
+and the portable runtime file inventory. Confucius has a separate Python 3.12
+runtime and bundled CUDA/VC libraries; do not copy a venv launcher or install its
+dependencies into the Breeze Python 3.10 runtime.
 Cached Electron archives are accepted only when their SHA-256 matches
 `electron-checksums.json`; Forge downloads are also verified by Electron's download
 tool. Update that pinned checksum from the official Electron release whenever the
@@ -53,6 +62,10 @@ complete `npm audit` to remain clean. Safe overrides keep `tar` and `tmp` on pat
 releases and replace Electron Packager's unmaintained `extract-zip` dependency with
 Electron's hardened, drop-in `@electron-internal/extract-zip`. The pinned Electron
 archive checksum limits build input to trusted, hash-verified archives.
+Desktop 0.3.8 pins Electron 43.7.7 and Forge 8.0.1; Forge's native glob replacement
+removes the unpatched `braces` build-time dependency chain. The app remains
+CommonJS, and the portable ZIP target and optional signing configuration are
+regression-tested after the build-tool update.
 
 ## Optional Authenticode signing
 
@@ -83,7 +96,7 @@ $env:T8_BREEZE_UPDATE_URL = 'https://downloads.example.com/breeze/windows/'
 
 The application accepts only HTTPS URLs without embedded credentials. Without a
 valid feed it makes no update request and keeps the offline manifest verifier
-available. Version 0.3.6 uses manual download/replace updates; production EXEs
+available. Version 0.3.8 uses manual download/replace updates; production EXEs
 should be Authenticode signed by the same trusted publisher.
 
 ## Offline integrity check

@@ -21,7 +21,10 @@ jobs:
           huggingface_hub pydantic safetensors "torch==2.9.1"
           "transformers==4.57.3"
       - run: python -m compileall -q t8_runtime comfyui-breeze-tts-T8
-      - run: python -m pytest -q tests_t8/test_core.py tests_t8/test_server.py -m "not model"
+      - run: >-
+          python -m pytest -q tests_t8/test_core.py tests_t8/test_server.py
+          tests_t8/test_transcription.py tests_t8/test_confucius_integration.py
+          tests_t8/test_version_contract.py -m "not model"
       - name: Run ComfyUI node tests
         working-directory: comfyui-breeze-tts-T8
         run: python -m pytest --confcutdir=tests tests -q
@@ -32,14 +35,17 @@ jobs:
       - name: Install locked desktop build tools
         working-directory: desktop
         run: npm ci
+      - name: Run desktop interaction regressions
+        working-directory: desktop
+        run: npm test
       - name: Audit production and release toolchain
         working-directory: desktop
         shell: pwsh
         run: |
           npm audit --omit=dev
           if ($LASTEXITCODE -ne 0) { throw 'Production dependency audit failed.' }
-          npm audit --audit-level=critical
-          if ($LASTEXITCODE -ne 0) { throw 'Critical build-tool vulnerability detected.' }
+          npm audit
+          if ($LASTEXITCODE -ne 0) { throw 'Build-tool vulnerability detected.' }
       - name: Validate distribution configuration and manifests
         shell: pwsh
         run: .\packaging\Test-DistributionTools.ps1
