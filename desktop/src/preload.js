@@ -2,6 +2,7 @@ const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("t8Desktop", {
   chooseModelDirectory: () => ipcRenderer.invoke("choose-model-directory"),
+  chooseTranscriptionDirectory: (engine) => ipcRenderer.invoke("choose-transcription-directory", engine),
   chooseOutputDirectory: () => ipcRenderer.invoke("choose-output-directory"),
   chooseBundleFile: (kind) => ipcRenderer.invoke("choose-bundle-file", kind),
   saveDirectorySetting: (key, value) => ipcRenderer.invoke("save-directory-setting", key, value),

@@ -9,6 +9,7 @@ import numpy as np
 import soundfile as sf
 
 from .config import project_root, user_data_dir
+from .settings_store import load_settings
 
 
 _BUNDLED_LARGE_FILES = (
@@ -37,11 +38,40 @@ def bundled_whisper_large_available() -> bool:
 
 
 def resolve_whisper_model(model_size: str) -> tuple[str, Path | None, bool]:
+    custom = load_settings().get("whisper_model_dir")
+    if custom:
+        directory = Path(custom).expanduser().resolve()
+        validate_whisper_model(directory)
+        return str(directory), None, False
     if model_size == "large-v3" and bundled_whisper_large_available():
         return str(bundled_whisper_model_dir()), None, True
     cache = user_data_dir() / "models" / "whisper"
     cache.mkdir(parents=True, exist_ok=True)
     return model_size, cache, False
+
+
+def validate_whisper_model(directory: Path) -> None:
+    missing = [name for name in _BUNDLED_LARGE_FILES if not (directory / name).is_file() or (directory / name).stat().st_size <= 0]
+    if missing:
+        raise ValueError(f"Whisper Large-v3 模型目录不完整：{directory}；缺少 {', '.join(missing)}。需要 faster-whisper / CTranslate2 格式。")
+
+
+def release_whisper_models() -> None:
+    with _MODEL_LOCK:
+        _MODEL_CACHE.clear()
+    import gc
+    gc.collect()
+
+
+def transcription_settings() -> dict[str, Any]:
+    from .confucius import model_dir, bundled_model_dir
+    saved = load_settings()
+    return {"whisper_model_directory": saved.get("whisper_model_dir", str(bundled_whisper_model_dir())),
+            "confucius_model_directory": str(model_dir()),
+            "whisper_model_custom": bool(saved.get("whisper_model_dir")),
+            "confucius_model_custom": bool(saved.get("confucius_model_dir")),
+            "confucius_default_directory": str(bundled_model_dir()),
+            "whisper_default_directory": str(bundled_whisper_model_dir())}
 
 
 def whisper_available() -> bool:
@@ -102,7 +132,7 @@ def analyze_reference_audio(path: Path) -> dict[str, Any]:
     }
 
 
-def transcribe_audio(
+def _transcribe_whisper(
     path: Path,
     *,
     model_size: str = "large-v3",
@@ -148,6 +178,8 @@ def transcribe_audio(
             condition_on_previous_text=False,
             word_timestamps=True,
         )
+        # faster-whisper performs inference lazily; consume under the same lock.
+        segments = list(segments)
     items = []
     srt_blocks = []
     for index, segment in enumerate(segments, start=1):
@@ -167,6 +199,9 @@ def transcribe_audio(
             f"{index}\n{_srt_timestamp(start_ms)} --> {_srt_timestamp(end_ms)}\n{text}"
         )
     return {
+        "engine": "whisper",
+        "engine_label": "Whisper Large-v3",
+        "text": " ".join(item["text"] for item in items),
         "language": getattr(info, "language", language),
         "language_probability": getattr(info, "language_probability", None),
         "segments": items,
@@ -180,6 +215,31 @@ def transcribe_audio(
         "audio_quality": audio_quality,
         "warning": "Whisper 结果仅是草稿；用于声音克隆前必须与参考音频逐字核对。",
     }
+
+
+def transcribe_audio(path: Path, *, model_size: str = "large-v3", language: str | None = None,
+                     engine: str = "whisper", hotwords: str = "", context: str = "") -> dict[str, Any]:
+    if engine == "whisper":
+        return _transcribe_whisper(path, model_size=model_size, language=language)
+    if engine != "confucius":
+        raise ValueError("不支持的转录引擎。")
+    from . import confucius
+    quality = analyze_reference_audio(path)
+    raw = confucius.transcribe(path, language=language, hotwords=hotwords, context=context)
+    text = str(raw.get("text") or "").strip()
+    # Pinned upstream returns boundary metadata without per-segment text.
+    # Preserve it separately and never invent aligned subtitle/word timestamps.
+    return {"engine": "confucius", "engine_label": "Confucius4-R2T2 Q8", "text": text,
+            "segments": [], "srt": "", "timestamps_available": False,
+            "recognition_boundaries": raw.get("segments", []),
+            "language": raw.get("language", language), "language_probability": None,
+            "model_size": "q8_0", "device": "cuda", "draft_only": True,
+            "bundled_model": confucius.availability()["bundled_model"],
+            "duration_seconds": quality["duration_seconds"], "audio_quality": quality,
+            "elapsed_ms": raw.get("elapsed_ms"), "status": raw.get("status"),
+            "quality_status": raw.get("quality_status"), "truncated": bool(raw.get("truncated")),
+            "mode_executed": raw.get("mode_executed", raw.get("mode")),
+            "warning": "Confucius 结果仅是草稿，可能漏字或截断；用于声音克隆前必须逐字核对。此引擎不提供精确字幕时间戳或翻译。"}
 
 
 def _srt_timestamp(milliseconds: int) -> str:

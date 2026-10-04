@@ -4,18 +4,21 @@ param(
     [switch]$SkipNpmInstall,
     [ValidatePattern('^[a-z0-9][a-z0-9._-]*$')]
     [string]$Channel = 'stable',
-    [switch]$RequireSignedWindows
+    [switch]$RequireSignedWindows,
+    [string]$OutputRoot = ''
 )
 
 $ErrorActionPreference = 'Stop'
 $arguments = @{}
 if ($SkipRuntime) { $arguments.SkipRuntime = $true }
 if ($SkipNpmInstall) { $arguments.SkipNpmInstall = $true }
+if ($OutputRoot) { $arguments.OutputRoot = $OutputRoot }
 
 & (Join-Path $PSScriptRoot 'build_portable.ps1') @arguments
-& (Join-Path $PSScriptRoot 'build_self_extract.ps1')
+& (Join-Path $PSScriptRoot 'build_self_extract.ps1') -OutputRoot $OutputRoot
 
 $artifactRoot = Join-Path $PSScriptRoot '..\desktop\out\make'
+if ($OutputRoot) { $artifactRoot = Join-Path ([IO.Path]::GetFullPath($OutputRoot)) 'make' }
 $manifestArguments = @{
     ArtifactRoot = $artifactRoot
     Channel = $Channel

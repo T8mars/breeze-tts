@@ -4,7 +4,7 @@ const { spawnSync } = require("node:child_process");
 const asar = require("@electron/asar");
 const { version } = require("../package.json");
 
-const out = path.resolve(__dirname, "..", "out");
+const out = process.env.T8_DESKTOP_OUT ? path.resolve(process.env.T8_DESKTOP_OUT) : path.resolve(__dirname, "..", "out");
 if (!fs.existsSync(out)) throw new Error("desktop/out does not exist; run npm run package first.");
 const currentPackageSuffix = `-v${version}-win32-x64`;
 const appDirs = fs.readdirSync(out).filter((name) => name.endsWith(currentPackageSuffix));
@@ -25,6 +25,15 @@ const required = [
   "resources/backend/NOTICE",
   "resources/backend/requirements-desktop.lock.txt",
   "resources/backend/WHISPER_NOTICE.md",
+  "resources/backend/CONFUCIUS_NOTICE.md",
+  "resources/backend/vendor/confucius-r2t2/bridge.py",
+  "resources/backend/t8_runtime/confucius_worker.py",
+  "resources/backend/confucius/python/python.exe",
+  "resources/backend/confucius/native/bin/Release/ggml-cuda.dll",
+  "resources/backend/models/Confucius4-R2T2-GGUF/Confucius4-R2T2-Q8_0.gguf",
+  "resources/backend/models/Confucius4-R2T2-GGUF/mmproj-Confucius4-R2T2-Q8_0.gguf",
+  "resources/backend/models/Confucius4-R2T2-GGUF/MODEL_LICENSE",
+  "resources/backend/models/Confucius4-R2T2-GGUF/FireRedVAD-ONNX/fireredvad_stream_vad_with_cache.onnx",
   "resources/backend/models/faster-whisper-large-v3/config.json",
   "resources/backend/models/faster-whisper-large-v3/model.bin",
   "resources/backend/models/faster-whisper-large-v3/preprocessor_config.json",
@@ -92,6 +101,13 @@ if (!runtimeManagerPy.includes('TORCHINDUCTOR_USE_STATIC_CUDA_LAUNCHER"] = "0"')
 }
 const python = path.join(root, "resources/python/python.exe");
 const backend = path.join(root, "resources/backend");
+const confuciusSmoke = spawnSync(
+  path.join(backend, "confucius/python/python.exe"),
+  ["-I", "-B", path.join(backend, "packaging/verify_confucius_runtime.py"), "--project-root", backend],
+  { cwd: backend, encoding: "utf8", windowsHide: true, timeout: 180000,
+    env: { ...process.env, PYTHONHOME: "", PYTHONPATH: "", CUDA_PATH: path.join(backend, "confucius/cuda") } }
+);
+if (confuciusSmoke.status !== 0) throw new Error(`Packaged Confucius runtime verification failed: ${confuciusSmoke.stdout}\n${confuciusSmoke.stderr}`);
 const smoke = spawnSync(
   python,
   ["-c", "import flash_attn,importlib.metadata,torch,transformers,triton,qwen_tts,faster_whisper,t8_runtime.server; from torch.utils._triton import has_triton_package; from t8_runtime.transcription import bundled_whisper_large_available; assert bundled_whisper_large_available(); assert has_triton_package(); assert importlib.metadata.version('triton-windows') == '3.5.1.post24'; assert importlib.metadata.version('flash-attn') == '2.8.3'; print(torch.__version__,transformers.__version__,triton.__version__,flash_attn.__version__)"],

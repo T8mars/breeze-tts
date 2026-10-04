@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "component": "Confucius4-R2T2 Q8 offline transcription",
+  "source": {
+    "repository": "https://github.com/T8mars/comfyui-confucius-r2t2-t8",
+    "commit": "189fb555a8f283e7c2d28925f2df047488e99077",
+    "version": "0.1.2",
+    "vendor_directory": "vendor/confucius-r2t2",
+    "hash_normalization": "UTF-8, CRLF/CR to LF",
+    "files": {
+      "bridge.py": "25d9d4cf4dfe0a0565ccb528abe78e4eb29a96d70d7bcca782b6f9e72eeb5ff2",
+      "hotwords.py": "741d5b461095a9fa5b5ca308c0c0cd154e4f7bc939d0d56f5f6e3e9faeabb6de",
+      "LICENSE": "14e7c118524c62f53bbbaeacd3a1097f080a0a39e941bd00cfaace9a55fa2d24",
+      "requirements-worker.txt": "96f253bb62389437225b82d604c469ce11f88759a2789bf1cd384355fb90cb6a",
+      "r2t2_core/__init__.py": "e3020e96fa24224680a1d1f1e47f9951d441d95eaf6978a8ea6b3144828e31cd",
+      "r2t2_core/audio.py": "72baec8e9257d7f20ab33497d71bd4a0cde116751829bae4ee6094653610999c",
+      "r2t2_core/evaluation.py": "58a69945dc9ac995e90e046ff03b9beb3aedf0126a3ef580fff3f38bc6cf23cb",
+      "r2t2_core/native.py": "24d85941ce0b176cf88b724be345522bced890c73493dffd5ebedad48b7dbb63",
+      "r2t2_core/segmented.py": "b983a939eaa372eeb422c027ec9c8a6412169690822bc0e5d2e6e0f4bd901313",
+      "r2t2_core/streaming.py": "ce8f40c2c4043dba2b1f7912a97f9dbd7ac9e94a04781eb7f44213360ac87cf6",
+      "r2t2_core/vad.py": "b0e1f680384ffefe3ce75b608ec107723cbc93a520b0a285d8a0cf9cec5bd3d2",
+      "r2t2_core/worker.py": "b247ac22afc5d60ae52348afe5e38ccd49737073fa583c07e25bae01972d5f06",
+      "r2t2_native/CMakeLists.txt": "e280413a552bd3039e25868ed2d7db6f160f62fda78be377e0b97ee90dc9aaed",
+      "r2t2_native/LICENSE": "14e7c118524c62f53bbbaeacd3a1097f080a0a39e941bd00cfaace9a55fa2d24",
+      "r2t2_native/MODEL_LICENSE": "4d9321cdad58182faa878b015de7d60069881614ddd7571de70f751a9b8e3811",
+      "r2t2_native/native_ext.cpp": "d83152aa41cffe6a7a60b207a74a55b4cba01c84237dda6605abf86460b5f96a",
+      "r2t2_native/NOTICE.md": "d7bca37fcaf00d52f565f7d8af4298815c13494fc27f7f77734396cc2796b9fa"
+    }
+  },
+  "python": {
+    "major_minor": "3.12",
+    "architecture": "64bit",
+    "dependencies": {
+      "aiohttp": "3.14.3",
+      "numpy": "2.5.3",
+      "onnxruntime": "1.23.2",
+      "kaldi-native-fbank": "1.22.3",
+      "kaldiio": "2.18.1",
+      "pybind11": "3.0.1",
+      "requests": "2.34.2",
+      "soundfile": "0.14.0",
+      "soxr": "1.1.0"
+    },
+    "imports": ["aiohttp", "numpy", "onnxruntime", "kaldi_native_fbank", "kaldiio", "pybind11", "requests", "soundfile", "soxr"]
+  },
+  "native": {
+    "llama_cpp_repository": "https://github.com/ggml-org/llama.cpp",
+    "llama_cpp_commit": "ad6c66839af3c5646fba8c6c2e2087a1e4e38948",
+    "cuda_toolkit": "12.8",
+    "cuda_architectures": ["75", "80", "86", "89", "90", "100", "120"],
+    "dlls": ["ggml-base.dll", "ggml-cpu.dll", "ggml-cuda.dll", "ggml.dll", "llama.dll", "mtmd.dll"],
+    "cuda_dlls": ["cudart64_12.dll", "cublas64_12.dll", "cublasLt64_12.dll"],
+    "vc_dlls": ["msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll"],
+    "verified_gpu": "RTX 5090 Laptop (SM 12.0); other architecture targets require hardware validation"
+  },
+  "paths": {
+    "runtime_source": ".runtime/confucius",
+    "runtime_packaged": "confucius",
+    "model_source": ".runtime/confucius-models/Confucius4-R2T2-GGUF",
+    "model_packaged": "models/Confucius4-R2T2-GGUF",
+    "vad_subdirectory": "FireRedVAD-ONNX",
+    "runtime_inventory": "runtime-files.json"
+  },
+  "models": {
+    "repo_id": "t8star/Confucius-R2t2-Comfy",
+    "revision": "2223a55593a85bbaf2b12d58c410da67a8822608",
+    "official_repo_id": "netease-youdao/Confucius4-R2T2-GGUF",
+    "official_revision": "86ff0251cb9f456b63aeef5f80137f104e22869a",
+    "files": [
+      {"path": "Confucius4-R2T2-Q8_0.gguf", "size": 1834422208, "sha256": "151097e43957a19984ea7de66e8144ce69b95039eb31c93da4f58db367e455c3"},
+      {"path": "mmproj-Confucius4-R2T2-Q8_0.gguf", "size": 348336544, "sha256": "8dc2c67e6a0484114928142d098db7ad94ae9f34c78948ef9d37a9678418cb65"},
+      {"path": "MODEL_LICENSE", "size": 11132, "sha256": "064483c5ba1dc20907038108da4f45d5b37cd0a41a351c8a8bb98ba1af48c505"},
+      {"path": "MODEL_LICENSE_zh", "size": 7789, "sha256": "6ed2e9946bd0b0185a6c690565cf2f8de23044a513be6e1ec7c97e6995ce241b"},
+      {"path": "FireRedVAD-ONNX/fireredvad_stream_vad_with_cache.onnx", "size": 2306042, "sha256": "b3c97836130dc34fc32d56fab551e88cf9454511de2b3c250a5e6578dee74b93"},
+      {"path": "FireRedVAD-ONNX/cmvn.ark", "size": 1311, "sha256": "c87f6f13edf0f0ec7535ddfc9cc3387d9268cb234b70182d566c5e2edf3ca473"},
+      {"path": "FireRedVAD-ONNX/LICENSE", "size": 11357, "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"}
+    ]
+  }
+}

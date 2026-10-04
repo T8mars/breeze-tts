@@ -14,7 +14,30 @@
 > [!NOTE]
 > This workspace also contains the unofficial **T8star-Aix Voice Studio** Windows portable integration and the user-requested `comfyui-breeze-tts-T8` node package. See [`T8_DISTRIBUTION.md`](T8_DISTRIBUTION.md) and [`roadmap.md`](roadmap.md). These additions are not affiliated with or endorsed by BreezeBlue.
 
-### T8star-Aix Voice Studio 0.3.6
+### T8star-Aix Voice Studio 0.3.8
+
+Windows 整合包新增 **Whisper Large-v3 / Confucius4-R2T2 Q8 双引擎转写**，在声音克隆生成页和角色音色库直接选择。完整便携包包含两套 ASR 权重、FireRedVAD 和隔离的 CUDA worker；无需另装 ComfyUI、Python、vLLM 或 CUDA Toolkit（仍需 NVIDIA 驱动）。此次仅更新桌面整合包，**Breeze 节点 0.3.7 和 Confucius 节点 0.1.2 均保持不变**。
+
+- Confucius 直接复用我们已有的 [ComfyUI 项目](https://github.com/T8mars/comfyui-confucius-r2t2-t8)，固定源码 `189fb555a8f283e7c2d28925f2df047488e99077`；没有重写推理或合并未发布 PR。
+- 两个引擎都支持 **设置与诊断 → 转录引擎与模型路径 → 选择并保存 / 保存路径 / 恢复内置**。直接选择包含模型文件的目录，设置跨重启保存；可以复用 ComfyUI 模型目录而不重复存储权重。
+- Confucius 支持自动识别、中英粤日韩及德法俄葡西意语，以及热词和上下文；仅用于转写，不是翻译。它返回完整草稿，不伪造字幕或词级时间戳；需要字幕时间范围时使用 Whisper。
+- 转录与语音生成串行使用显卡。转录前自动释放 TTS 模型，转录结束后释放 ASR；下一次生成自动重新加载 Breeze。Confucius 要求 CUDA GPU，失败会明确报错，不会静默落到 CPU。Whisper 在空闲显存不足 6 GiB 时仍可使用 CPU int8。
+- [Confucius Q8 模型镜像](https://huggingface.co/t8star/Confucius-R2t2-Comfy) / [Breeze 模型镜像](https://huggingface.co/t8star/breeze-tts-comfy) / [Windows 整合包 Releases](https://github.com/T8mars/breeze-tts/releases)。Confucius 官方 Q8 权重没有新版本，内置文件与官方固定 SHA-256 一致。Breeze 权重仍需先接受许可证后下载，不内嵌公开整合包。
+
+自定义目录示例（Whisper 必须是 faster-whisper / CTranslate2 格式，不能指向 Hugging Face Transformers safetensors 目录）：
+
+```text
+D:\ASR\faster-whisper-large-v3\
+  config.json  model.bin  preprocessor_config.json  tokenizer.json  vocabulary.json
+D:\ASR\Confucius4-R2T2-GGUF\
+  Confucius4-R2T2-Q8_0.gguf
+  mmproj-Confucius4-R2T2-Q8_0.gguf
+  FireRedVAD-ONNX\  # 可放此处；缺省复用整合包内置 VAD
+```
+
+Confucius 使用网易有道独立模型许可（不是 Apache），源码 Apache-2.0、llama.cpp MIT、VAD Apache-2.0。详见 [`CONFUCIUS_NOTICE.md`](CONFUCIUS_NOTICE.md)；随包保留模型、CUDA 与 VC 运行库许可。两种识别结果都是草稿：必须播放原音频逐字修正并勾选核验，不会自动覆盖准确逐字稿，也不会改动或清理参考录音。
+
+The desktop bundle adds an offline Confucius Q8 transcription option by reusing the pinned existing worker in a separate portable Python 3.12 process. Both ASR engines support persistent custom model directories. Neither ComfyUI node is updated. See the Chinese instructions above and [`T8_DISTRIBUTION.md`](T8_DISTRIBUTION.md) for build steps and licensing.
 
 The Windows integration uses an IndexTTS 2.5-inspired light launcher and functional workbench. Version 0.3.6 extends no-CFG Fast All backbone-prefill coverage through 512 tokens and automatically falls back only that prefill stage for longer undeclared shapes, preserving the accelerated decode, depth-decoder, and codec stages instead of failing long Voice Clone requests. Generation metadata and the desktop UI report any selective fallback. It retains automatic ComfyUI model recovery after low-VRAM unloading and the official 2026-09-08 inference fixes, including reference-only pure cloning, request-boundary seed reset, BF16 cache dtype, batch-4 warmups, and independent FlashAttention/SDPA selection for the nested text encoder. Diagnostics warn when the GPU lacks native BF16 support and hard-verify that the model, codec, and generation runtime share one CUDA device.
 

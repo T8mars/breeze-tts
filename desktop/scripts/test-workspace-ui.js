@@ -270,6 +270,20 @@ test("Whisper Large-v3 is bundled and its draft cannot silently replace the tran
   assert.match(main, /"--break-system-packages"/);
 });
 
+test("both reference pages select the existing Confucius engine and allow custom model paths", () => {
+  assert.match(html, /id="whisperModel"[\s\S]*?value="confucius"/);
+  assert.match(html, /id="voiceAsrEngine"[\s\S]*?value="confucius"/);
+  for (const id of ["whisperModelPath", "confuciusModelPath", "confuciusHotwords", "confuciusContext", "saveWhisperPathButton", "resetConfuciusPathButton"]) {
+    assert.ok(html.includes(`id="${id}"`), id);
+  }
+  assert.match(renderer, /transcriptionOptions\("generation"\)/);
+  assert.match(renderer, /transcriptionOptions\("voice"\)/);
+  assert.match(renderer, /result\.text \?\?/);
+  assert.match(renderer, /language_probability == null \? NaN/);
+  assert.match(renderer, /state\.generating \|\| state\.batching \|\| state\.transcribing/);
+  assert.match(renderer, /\/api\/settings\/transcription-directory/);
+});
+
 test("reference transcripts show a prominent warning and are enforced end to end", () => {
   assert.ok((html.match(/class="critical-transcript-warning" role="alert"/g) || []).length >= 2);
   assert.match(html, /必须边听边逐字核对并修改正确，否则不要生成/);

@@ -3,7 +3,8 @@ param(
     [switch]$SkipRuntime,
     [switch]$SkipNpmInstall,
     [switch]$SkipPortableZip,
-    [switch]$IncludeInstaller
+    [switch]$IncludeInstaller,
+    [string]$OutputRoot = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -14,6 +15,8 @@ $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $desktopRoot = Join-Path $projectRoot 'desktop'
 $backendStage = Join-Path $projectRoot '.package\backend'
 $buildTemp = Join-Path $projectRoot '.package\electron-temp'
+$desktopOut = if ($OutputRoot) { [IO.Path]::GetFullPath($OutputRoot) } else { Join-Path $desktopRoot 'out' }
+if ($desktopOut -eq [IO.Path]::GetPathRoot($desktopOut)) { throw 'OutputRoot cannot be a filesystem root.' }
 
 if (-not $SkipRuntime) {
     & (Join-Path $PSScriptRoot 'build_runtime.ps1')
@@ -29,6 +32,10 @@ if ($LASTEXITCODE -ne 0) { throw 'Existing Python runtime verification failed.' 
 if ($LASTEXITCODE -ne 0) { throw 'Existing FlashAttention runtime verification failed.' }
 & $runtimePython -m pip check
 if ($LASTEXITCODE -ne 0) { throw 'Existing Python runtime dependency check failed.' }
+$confuciusPython = Join-Path $projectRoot '.runtime\confucius\python\python.exe'
+if (-not (Test-Path -LiteralPath $confuciusPython -PathType Leaf)) { throw 'Portable Confucius Python is missing. Run prepare_confucius.ps1 first.' }
+& $confuciusPython -I -B (Join-Path $PSScriptRoot 'verify_confucius_runtime.py') --project-root $projectRoot
+if ($LASTEXITCODE -ne 0) { throw 'Confucius portable worker is missing or invalid. Run packaging\prepare_confucius.ps1 first.' }
 
 $expectedStage = [System.IO.Path]::GetFullPath((Join-Path $projectRoot '.package\backend'))
 $actualStage = [System.IO.Path]::GetFullPath($backendStage)
@@ -57,6 +64,11 @@ New-Item -ItemType Directory -Force -Path $actualTemp | Out-Null
 foreach ($directory in @('breeze_infer', 'configs', 't8_runtime', 'manifests')) {
     Copy-Item -LiteralPath (Join-Path $projectRoot $directory) -Destination $backendStage -Recurse -Force
 }
+New-Item -ItemType Directory -Force -Path (Join-Path $backendStage 'vendor') | Out-Null
+Copy-Item -LiteralPath (Join-Path $projectRoot 'vendor\confucius-r2t2') -Destination (Join-Path $backendStage 'vendor') -Recurse -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot '.runtime\confucius') -Destination $backendStage -Recurse -Force
+New-Item -ItemType Directory -Force -Path (Join-Path $backendStage 'packaging') | Out-Null
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'verify_confucius_runtime.py') -Destination (Join-Path $backendStage 'packaging') -Force
 $modelsStage = Join-Path $backendStage 'models'
 New-Item -ItemType Directory -Force -Path $modelsStage | Out-Null
 Get-ChildItem -LiteralPath (Join-Path $projectRoot 'models') -Force |
@@ -78,6 +90,16 @@ New-Item -ItemType Directory -Force -Path $whisperTarget | Out-Null
 foreach ($file in $whisperFiles) {
     Copy-Item -LiteralPath (Join-Path $whisperSource $file) -Destination $whisperTarget -Force
 }
+$confuciusSource = Join-Path $projectRoot '.runtime\confucius-models\Confucius4-R2T2-GGUF'
+$confuciusTarget = Join-Path $modelsStage 'Confucius4-R2T2-GGUF'
+New-Item -ItemType Directory -Force -Path $confuciusTarget | Out-Null
+foreach ($file in Get-ChildItem -LiteralPath $confuciusSource -File) {
+    $target = Join-Path $confuciusTarget $file.Name
+    # Large immutable model files share blocks in the same-volume staging tree.
+    try { New-Item -ItemType HardLink -Path $target -Target $file.FullName -ErrorAction Stop | Out-Null }
+    catch { Copy-Item -LiteralPath $file.FullName -Destination $target -Force }
+}
+Copy-Item -LiteralPath (Join-Path $confuciusSource 'FireRedVAD-ONNX') -Destination $confuciusTarget -Recurse -Force
 New-Item -ItemType Directory -Force -Path (Join-Path $backendStage 'desktop') | Out-Null
 Copy-Item -LiteralPath (Join-Path $desktopRoot 'src') -Destination (Join-Path $backendStage 'desktop') -Recurse -Force
 foreach ($file in @(
@@ -87,6 +109,7 @@ foreach ($file in @(
     'requirements-desktop.lock.txt',
     'requirements-whisper.txt',
     'WHISPER_NOTICE.md',
+    'CONFUCIUS_NOTICE.md',
     'T8_DISTRIBUTION.md'
 )) {
     Copy-Item -LiteralPath (Join-Path $projectRoot $file) -Destination $backendStage -Force
@@ -99,10 +122,10 @@ Copy-Item `
 $desktopManifest = Get-Content -LiteralPath (Join-Path $desktopRoot 'package.json') -Raw | ConvertFrom-Json
 $packageBaseName = "T8star-Aix-Voice-Studio-v$($desktopManifest.version)"
 $generatedTargets = @(
-    (Join-Path $desktopRoot "out\$packageBaseName-win32-x64"),
-    (Join-Path $desktopRoot "out\make\zip\win32\x64\$packageBaseName-win32-x64-$($desktopManifest.version).zip")
+    (Join-Path $desktopOut "$packageBaseName-win32-x64"),
+    (Join-Path $desktopOut "make\zip\win32\x64\$packageBaseName-win32-x64-$($desktopManifest.version).zip")
 )
-$desktopOutRoot = [System.IO.Path]::GetFullPath((Join-Path $desktopRoot 'out'))
+$desktopOutRoot = [System.IO.Path]::GetFullPath($desktopOut)
 foreach ($generatedTarget in $generatedTargets) {
     $resolvedTarget = [System.IO.Path]::GetFullPath($generatedTarget)
     if (-not $resolvedTarget.StartsWith(
@@ -119,6 +142,8 @@ foreach ($generatedTarget in $generatedTargets) {
 $previousTemp = $env:TEMP
 $previousTmp = $env:TMP
 $previousElectronZipDir = $env:T8_ELECTRON_ZIP_DIR
+$previousDesktopOut = $env:T8_DESKTOP_OUT
+$env:T8_DESKTOP_OUT = $desktopOut
 $electronVersion = [string]$desktopManifest.devDependencies.electron
 $electronZipName = "electron-v$electronVersion-win32-x64.zip"
 $electronChecksumManifest = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'electron-checksums.json') -Raw |
@@ -188,6 +213,7 @@ try {
     $env:TEMP = $previousTemp
     $env:TMP = $previousTmp
     $env:T8_ELECTRON_ZIP_DIR = $previousElectronZipDir
+    $env:T8_DESKTOP_OUT = $previousDesktopOut
 }
 
 if ($SkipPortableZip) {
@@ -202,7 +228,7 @@ if ($SkipPortableZip) {
         $hash = (Get-FileHash -LiteralPath $artifact.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
         "$hash  $($artifact.Name)"
     }
-    $checksumPath = Join-Path $desktopRoot 'out\make\SHA256SUMS.txt'
+    $checksumPath = Join-Path $desktopOut 'make\SHA256SUMS.txt'
     [System.IO.File]::WriteAllLines($checksumPath, $lines, [System.Text.UTF8Encoding]::new($false))
     Write-Host "Portable artifact complete. Checksums: $checksumPath"
 }

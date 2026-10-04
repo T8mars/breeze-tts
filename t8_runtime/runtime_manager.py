@@ -10,6 +10,7 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, replace
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Callable
 
@@ -469,6 +470,19 @@ class RuntimeManager:
                 torch.cuda.empty_cache()
         except Exception:
             pass
+
+    @contextmanager
+    def auxiliary_operation(self, *, unload: bool = True):
+        """Serialize ASR with TTS, freeing its VRAM for the isolated worker."""
+        if not self._generation_lock.acquire(blocking=False):
+            raise RuntimeError("正在生成或转录，请等待当前任务结束。")
+        try:
+            with self._load_lock:
+                if unload:
+                    self._unload_state()
+                yield
+        finally:
+            self._generation_lock.release()
 
     def unload(self, *, wait: bool = False) -> None:
         if not self._generation_lock.acquire(blocking=wait):

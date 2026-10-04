@@ -55,6 +55,7 @@ if (windowsSign) {
 }
 
 module.exports = {
+  ...(process.env.T8_DESKTOP_OUT ? { outDir: path.resolve(process.env.T8_DESKTOP_OUT) } : {}),
   packagerConfig: {
     name: `T8star-Aix-Voice-Studio-v${desktopPackage.version}`,
     executableName: "T8star-Aix-Voice-Studio",

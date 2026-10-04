@@ -285,15 +285,16 @@ function showTranscriptDraft(kind, result) {
   const panel = $(voice ? "voiceWhisperDraftPanel" : "whisperDraftPanel");
   const draft = $(voice ? "voiceWhisperDraftText" : "whisperDraftText");
   const quality = $(voice ? "voiceWhisperDraftQuality" : "whisperDraftQuality");
-  draft.value = (result.segments || []).map((item) => item.text).join(" ").trim();
-  const probability = Number(result.language_probability);
+  draft.value = String(result.text ?? (result.segments || []).map((item) => item.text).join(" ")).trim();
+  const probability = result.language_probability == null ? NaN : Number(result.language_probability);
   const languageConfidence = Number.isFinite(probability) ? ` · 语言置信度 ${(probability * 100).toFixed(0)}%` : "";
   const audioQuality = result.audio_quality || {};
   const warnings = Array.isArray(audioQuality.warnings) ? audioQuality.warnings : [];
   const health = warnings.length
     ? `参考音频提醒：${warnings.join(" ")}`
     : "基础电平、静音和削波检查未发现明显问题。";
-  quality.textContent = `Large-v3 · ${result.language || "自动识别"}${languageConfidence} · ${result.segments?.length || 0} 段。${health} 仍请确认没有音乐、混响或回声，并边听边逐字核对。`;
+  const review = result.truncated || result.status === "requires_review" || result.quality_status === "requires_review" ? "识别可能截断或含强制分段，请重点检查漏字。" : "";
+  quality.textContent = `${result.engine_label || "Whisper Large-v3"} · ${result.language || "自动识别"}${languageConfidence} · ${result.device || "unknown"}。${review}${health} ${result.warning || "仍请边听边逐字核对。"} 请确认没有音乐、混响或回声。`;
   panel.hidden = false;
 }
 
@@ -535,7 +536,7 @@ function setStatus(kind, text) {
 }
 
 function updateControlState() {
-  const generationBusy = state.generating || state.batching;
+  const generationBusy = state.generating || state.batching || state.transcribing;
   for (const id of GENERATION_CONFLICT_IDS) {
     const element = $(id);
     if (element) element.disabled = generationBusy || (state.downloading && id !== "chooseOutputButton");
@@ -567,8 +568,12 @@ function updateControlState() {
   for (const handle of document.querySelectorAll('#timelineTrack .timeline-handle')) handle.disabled = state.batching;
   $("timelineTrack")?.setAttribute("aria-disabled", String(state.batching));
   $("timelineTrack")?.classList.toggle("busy", state.batching);
-  $("transcribeButton").disabled = generationBusy || state.transcribing || !state.capabilities.whisper;
-  $("voiceTranscribeButton").disabled = generationBusy || state.transcribing || !state.capabilities.whisper || !$("voiceReferenceAudio").files[0];
+  $("transcribeButton").disabled = generationBusy || !transcriptionEngineAvailable("generation");
+  $("voiceTranscribeButton").disabled = generationBusy || !transcriptionEngineAvailable("voice") || !$("voiceReferenceAudio").files[0];
+  for (const id of ["whisperModel", "voiceAsrEngine", "confuciusHotwords", "confuciusContext", "whisperModelPath", "confuciusModelPath", "saveWhisperPathButton", "saveConfuciusPathButton", "browseWhisperPathButton", "browseConfuciusPathButton", "resetWhisperPathButton", "resetConfuciusPathButton"]) {
+    const element = $(id);
+    if (element) element.disabled = generationBusy;
+  }
   const selectedEditorVoice = state.voices.find((voice) => voice.id === $("libraryVoiceSelect")?.value);
   $("voiceClearReferenceButton").disabled = generationBusy || $("voiceMode").value !== "design" || !selectedEditorVoice?.has_reference || state.voiceClearReference;
   $("installWhisperButton").disabled = generationBusy || state.installingWhisper || state.whisperInstallComplete;
@@ -686,6 +691,7 @@ function renderCapabilities(capabilities) {
     voice_library: "音色库",
     srt: "SRT",
     whisper: "Whisper",
+    confucius: "Confucius Q8",
     flash_attention: "FlashAttention 2",
     fast_24gb: "24GB 加速",
     editable_timeline: "可编辑时间轴",
@@ -705,6 +711,9 @@ function renderCapabilities(capabilities) {
       : "Whisper 引擎可用，但内置 Large-v3 模型缺失；请重新下载完整整合包。")
     : "内置 faster-whisper 组件缺失；请重新下载完整整合包，或点击下方按钮联网修复。";
   $("installWhisperButton").hidden = Boolean(capabilities?.whisper && capabilities?.whisper_large_bundled) || state.whisperInstallComplete;
+  $("asrSettingsStatus").textContent = capabilities?.confucius
+    ? "Confucius Q8 就绪（NVIDIA CUDA）；转录前释放 TTS 显存，完成后自动关闭识别 worker。Whisper / Confucius 都只生成草稿。"
+    : `Confucius：${capabilities?.confucius_details?.reason || "组件未就绪"}`;
   updateControlState();
 }
 
@@ -797,6 +806,8 @@ async function refresh() {
     state.appInfo = appInfo || {};
     try {
       const settings = await api("/api/settings");
+      $("whisperModelPath").value = settings.whisper_model_directory || "";
+      $("confuciusModelPath").value = settings.confucius_model_directory || "";
       const outputDirectory = settings.output_directory || settings.output_dir;
       if (outputDirectory) {
         state.outputDirectory = outputDirectory;
@@ -1455,30 +1466,66 @@ async function deleteSelectedVoice() {
   beginNewVoice(`已删除音色“${voice.name}”，现在可直接新建另一个音色。`);
 }
 
-async function transcribeReference() {
-  if (!state.capabilities.whisper) {
-    throw new Error("内置 faster-whisper 组件缺失；请重新下载完整整合包或使用修复按钮。");
+function transcriptionEngine(kind) {
+  return $(kind === "voice" ? "voiceAsrEngine" : "whisperModel")?.value === "confucius" ? "confucius" : "whisper";
+}
+
+function transcriptionEngineAvailable(kind) {
+  return Boolean(state.capabilities[transcriptionEngine(kind)]);
+}
+
+function transcriptionOptions(kind) {
+  return { engine: transcriptionEngine(kind), model_size: "large-v3",
+    hotwords: $("confuciusHotwords").value.trim(), context: $("confuciusContext").value.trim() };
+}
+
+async function refreshAfterTranscription() {
+  try {
+    const data = await api("/api/diagnostics");
+    renderDiagnostics(data);
+    if (!data.runtime?.loaded) $("runtimeSummary").textContent = "转录已结束 · Breeze 显存已释放，下次生成时自动重载";
+  } catch (_) { /* Do not replace a useful transcription result/error with diagnostics failure. */ }
+}
+
+async function setTranscriptionDirectory(engine, { browse = false, reset = false } = {}) {
+  const field = $(engine === "whisper" ? "whisperModelPath" : "confuciusModelPath");
+  if (browse) {
+    if (!window.t8Desktop?.chooseTranscriptionDirectory) throw new Error("请在桌面应用中浏览，或直接输入模型路径。");
+    const selected = await window.t8Desktop.chooseTranscriptionDirectory(engine);
+    if (!selected) return;
+    field.value = selected;
   }
+  const path = reset ? "" : field.value.trim();
+  if (!reset && !path) throw new Error("目录不能为空；可点击恢复内置目录。");
+  const settings = await api("/api/settings/transcription-directory", { method: "POST", body: JSON.stringify({ engine, path }) });
+  field.value = settings[`${engine}_model_directory`];
+  renderCapabilities(await api("/api/capabilities"));
+  $("asrSettingsStatus").textContent = `${engine === "whisper" ? "Whisper" : "Confucius"} 路径已${reset ? "恢复为内置" : "保存"}，下次启动仍有效。`;
+}
+
+async function transcribeReference() {
+  if (!transcriptionEngineAvailable("generation")) throw new Error("所选识别引擎不可用，请检查设置中的模型路径或完整整合包。");
   const reference = $("referenceAudio").files[0];
   if (!reference) throw new Error("请先选择参考音频。");
   await inspectReferenceAudio(reference);
   state.transcribing = true;
   updateControlState();
-  $("whisperStatus").textContent = "正在使用整合包内置 Whisper Large-v3 生成草稿…";
+  $("whisperStatus").textContent = `正在使用 ${transcriptionEngine("generation") === "confucius" ? "Confucius Q8" : "Whisper Large-v3"} 生成草稿；暂时释放 TTS 显存…`;
   try {
     const result = await api("/api/tools/transcribe", {
       method: "POST",
       body: JSON.stringify({
         reference_filename: reference.name,
         reference_audio_base64: await fileToBase64(reference),
-        model_size: "large-v3",
+        ...transcriptionOptions("generation"),
         language: $("whisperLanguage").value.trim() || null
       })
     });
     showTranscriptDraft("generation", result);
     $("referenceTranscriptVerified").checked = false;
-    $("whisperStatus").textContent = `Large-v3 草稿已生成 · ${result.device || "unknown"}；不会自动覆盖准确逐字稿。`;
+    $("whisperStatus").textContent = `${result.engine_label || "Whisper Large-v3"} 草稿已生成 · ${result.device || "unknown"}；不会自动覆盖准确逐字稿。`;
   } finally {
+    await refreshAfterTranscription();
     state.transcribing = false;
     updateControlState();
   }
@@ -1922,29 +1969,28 @@ async function remixCompletedDialogueProject(project) {
 }
 
 async function transcribeVoiceReference() {
-  if (!state.capabilities.whisper) {
-    throw new Error("内置 faster-whisper 组件缺失；请重新下载完整整合包或使用修复按钮。");
-  }
+  if (!transcriptionEngineAvailable("voice")) throw new Error("所选识别引擎不可用，请检查设置中的模型路径或完整整合包。");
   const reference = $("voiceReferenceAudio").files[0];
   if (!reference) throw new Error("请先在音色库上传新的参考音频。");
   await inspectReferenceAudio(reference);
   state.transcribing = true;
   updateControlState();
-  $("voiceReferenceStatus").textContent = "正在使用整合包内置 Whisper Large-v3 生成草稿…";
+  $("voiceReferenceStatus").textContent = `正在使用 ${transcriptionEngine("voice") === "confucius" ? "Confucius Q8" : "Whisper Large-v3"} 生成草稿；暂时释放 TTS 显存…`;
   try {
     const result = await api("/api/tools/transcribe", {
       method: "POST",
       body: JSON.stringify({
         reference_filename: reference.name,
         reference_audio_base64: await fileToBase64(reference),
-        model_size: "large-v3",
+        ...transcriptionOptions("voice"),
         language: $("voiceLanguage").value === "auto" ? null : $("voiceLanguage").value
       })
     });
     showTranscriptDraft("voice", result);
     $("voiceTranscriptVerified").checked = false;
-    $("voiceReferenceStatus").textContent = "Large-v3 草稿已生成；不会自动覆盖准确逐字稿。";
+    $("voiceReferenceStatus").textContent = `${result.engine_label || "Whisper Large-v3"} 草稿已生成 · ${result.device || "unknown"}；不会自动覆盖准确逐字稿。`;
   } finally {
+    await refreshAfterTranscription();
     state.transcribing = false;
     updateControlState();
   }
@@ -2881,6 +2927,21 @@ $("globalTaskCancelButton").addEventListener("click", () => {
 });
 $("referenceText").addEventListener("input", () => { clearSelectedVoice(); $("referenceTranscriptVerified").checked = false; });
 $("transcribeButton").addEventListener("click", () => transcribeReference().catch((error) => { $("whisperStatus").textContent = error.message; }));
+for (const [engine, field] of [["whisper", "Whisper"], ["confucius", "Confucius"]]) {
+  for (const [action, options] of [["save", {}], ["browse", { browse: true }], ["reset", { reset: true }]]) {
+    $(`${action}${field}PathButton`).addEventListener("click", () => setTranscriptionDirectory(engine, options).catch((error) => setActionMessage("asrSettingsStatus", errorMessage(error), "error")));
+  }
+}
+for (const [kind, id] of [["generation", "whisperModel"], ["voice", "voiceAsrEngine"]]) {
+  try {
+    const saved = localStorage.getItem(`t8-asr-engine-${kind}`);
+    if (["whisper", "confucius"].includes(saved)) $(id).value = saved === "whisper" && kind === "generation" ? "large-v3" : saved;
+  } catch (_) { /* localStorage may be disabled. */ }
+  $(id).addEventListener("change", () => {
+    try { localStorage.setItem(`t8-asr-engine-${kind}`, transcriptionEngine(kind)); } catch (_) {}
+    updateControlState();
+  });
+}
 $("applyWhisperDraftButton").addEventListener("click", () => applyTranscriptDraft("generation"));
 $("dismissWhisperDraftButton").addEventListener("click", () => { $("whisperDraftPanel").hidden = true; });
 $("installWhisperButton").addEventListener("click", () => installWhisperComponent().catch((error) => { $("whisperStatus").textContent = error.message; }));

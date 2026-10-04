@@ -13,7 +13,7 @@ import zipfile
 from contextlib import asynccontextmanager
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import soundfile as sf
@@ -21,7 +21,7 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from .config import (
     CORE_REVISION,
@@ -46,7 +46,9 @@ from .pronunciation import apply_pronunciation_aliases
 from .dialogue import apply_timeline_edit, new_project, normalize_project, parse_dialogue, to_srt
 from .script_tools import parse_multi_role_script, parse_srt
 from .settings_store import load_settings, update_settings
-from .transcription import bundled_whisper_large_available, transcribe_audio, whisper_available
+from .transcription import (bundled_whisper_large_available, transcribe_audio, whisper_available,
+                            transcription_settings, validate_whisper_model, release_whisper_models)
+from .confucius import availability as confucius_availability, validate_models as validate_confucius_models
 from .workspace_store import (
     ProjectRevisionConflict,
     QueueRevisionConflict,
@@ -184,6 +186,13 @@ class TranscriptionRequest(BaseModel):
     reference_audio_base64: str
     model_size: str = "large-v3"
     language: str | None = None
+    engine: Literal["whisper", "confucius"] = "whisper"
+    hotwords: str = Field(default="", max_length=8192)
+    context: str = Field(default="", max_length=8192)
+
+
+class TranscriptionDirectoryRequest(DirectorySettingRequest):
+    engine: Literal["whisper", "confucius"]
 
 
 def _configure_logging() -> None:
@@ -548,10 +557,11 @@ def create_app(model_dir: Path | None = None) -> FastAPI:
         return runtime.status()
 
     @app.get("/api/settings")
-    def settings() -> dict[str, str]:
+    def settings() -> dict[str, Any]:
         persisted = load_settings()
         return {
             **persisted,
+            **transcription_settings(),
             "model_directory": str(runtime.model_dir),
             "output_directory": str(output_dir()),
             "model_dir": str(runtime.model_dir),
@@ -573,6 +583,22 @@ def create_app(model_dir: Path | None = None) -> FastAPI:
         os.environ["T8_BREEZE_OUTPUT_DIR"] = str(target)
         return {"output_directory": str(target), "output_dir": str(target)}
 
+    @app.post("/api/settings/transcription-directory")
+    def set_transcription_directory(request: TranscriptionDirectoryRequest) -> dict[str, Any]:
+        try:
+            with runtime.auxiliary_operation(unload=False):
+                if request.path.strip():
+                    target = Path(request.path).expanduser().resolve()
+                    (validate_whisper_model if request.engine == "whisper" else validate_confucius_models)(target)
+                    update_settings(**{f"{request.engine}_model_dir": str(target)})
+                else:
+                    update_settings(**{f"{request.engine}_model_dir": None})
+                return transcription_settings()
+        except RuntimeError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @app.get("/api/capabilities")
     def capabilities() -> dict[str, Any]:
         return {
@@ -583,6 +609,8 @@ def create_app(model_dir: Path | None = None) -> FastAPI:
             "srt": True,
             "whisper": whisper_available(),
             "whisper_large_bundled": bundled_whisper_large_available(),
+            "confucius": confucius_availability()["available"],
+            "confucius_details": confucius_availability(),
             "fast_24gb": bool(runtime.status()["fast_all_available"]),
             "flash_attention": bool(runtime.status()["flash_attention_available"]),
             "editable_timeline": True,
@@ -830,18 +858,25 @@ def create_app(model_dir: Path | None = None) -> FastAPI:
 
     @app.post("/api/tools/transcribe")
     def transcribe(request: TranscriptionRequest) -> dict[str, Any]:
-        if request.model_size != "large-v3":
+        if request.engine == "whisper" and request.model_size != "large-v3":
             raise HTTPException(status_code=400, detail="此版本固定使用整合包内置 Whisper Large-v3。")
         reference_path: Path | None = None
         try:
             reference_path = _decode_reference(request.model_dump(), max_seconds=600.0)
             if reference_path is None:
                 raise ValueError("音频不能为空。")
-            return transcribe_audio(
-                reference_path, model_size=request.model_size, language=request.language
-            )
+            # Hold both runtime locks across ASR. Generation cannot start or
+            # reload TTS while the other engine owns the GPU.
+            with runtime.auxiliary_operation():
+                release_whisper_models()
+                try:
+                    return transcribe_audio(reference_path, model_size=request.model_size,
+                                            language=request.language, engine=request.engine,
+                                            hotwords=request.hotwords, context=request.context)
+                finally:
+                    release_whisper_models()
         except RuntimeError as exc:
-            raise HTTPException(status_code=501, detail=str(exc)) from exc
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         finally:

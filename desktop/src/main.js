@@ -644,6 +644,15 @@ ipcMain.handle("choose-output-directory", async () => {
   return selected;
 });
 
+ipcMain.handle("choose-transcription-directory", async (_event, engine) => {
+  if (!["whisper", "confucius"].includes(engine)) throw new Error("不支持的转录引擎。");
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: `选择 ${engine === "whisper" ? "Whisper Large-v3 (CTranslate2)" : "Confucius Q8 GGUF + projector"} 模型目录`,
+    properties: ["openDirectory"]
+  });
+  return result.canceled ? null : result.filePaths[0];
+});
+
 ipcMain.handle("choose-bundle-file", async (_event, kind) => {
   const filters = kind === "voice"
     ? [{ name: "T8 Voice Bundle", extensions: ["zip"] }]

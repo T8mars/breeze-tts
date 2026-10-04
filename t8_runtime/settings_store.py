@@ -8,7 +8,7 @@ from typing import Any
 
 
 _LOCK = threading.RLock()
-_ALLOWED_KEYS = {"model_dir", "output_dir"}
+_ALLOWED_KEYS = {"model_dir", "output_dir", "whisper_model_dir", "confucius_model_dir"}
 
 
 def _user_data_dir() -> Path:

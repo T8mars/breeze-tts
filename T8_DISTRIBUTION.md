@@ -9,6 +9,12 @@ The implementation plan and acceptance record live in `roadmap.md`.
 
 ## Build the Windows packages
 
+Desktop **0.3.8** adds offline Confucius4-R2T2 Q8 alongside Whisper Large-v3, without changing either standalone ComfyUI node. Before packaging, prepare the isolated portable worker with `packaging/prepare_confucius.ps1 -SourceRoot <pinned-confucius-checkout> -NativeBuildDir <multi-architecture-build>`. See [CONFUCIUS_NOTICE.md](CONFUCIUS_NOTICE.md) and [manifests/confucius-runtime.json](manifests/confucius-runtime.json) for source/model hashes, dependencies and licenses. The worker is independent Python 3.12, not a copied venv launcher or an installation into ComfyUI. Build the native library from the pinned source with `75;80;86;89;90;100;120` CUDA architectures; compilation coverage does not mean every GPU has been physically tested.
+
+Both model directories can be saved or reset in **Settings & diagnostics → Transcription engines and model paths**. Confucius takes a directory containing the exact Q8 GGUF/model-projector pair; custom `FireRedVAD-ONNX/` is optional if bundled VAD is available. Whisper takes a CTranslate2 Large-v3 directory. A broken custom path fails explicitly instead of downloading another model. Confucius hotwords/context apply to generation-page and voice-library drafts. ASR unloads TTS first and releases its own model afterwards; the next TTS request reloads automatically. Confucius is CUDA-only and does not fabricate subtitle timestamps or translate languages.
+
+For low disk space, `build_portable.ps1`, `build_self_extract.ps1` and `build_release.ps1` accept `-OutputRoot <dedicated-build-directory>`; only this version's explicitly resolved outputs are cleared. Do not point it at a filesystem root.
+
 Use 64-bit PowerShell on Windows:
 
 ```powershell
@@ -25,7 +31,7 @@ The build creates a private portable CPython 3.10 runtime, installs official Bre
 
 ## Install the ComfyUI nodes
 
-The standalone node package is now **0.3.7**, fixing CPU/CUDA tensor mismatches after repeated runs or memory offloading (Issue #2), including the scaled text embedding, depth codebook head, codec residency, and CUDA Graph recapture. Update the nodes and restart ComfyUI. This node-only patch does not replace the **0.3.6** desktop portable distribution.
+The standalone node package is now **0.3.7**, fixing CPU/CUDA tensor mismatches after repeated runs or memory offloading (Issue #2), including the scaled text embedding, depth codebook head, codec residency, and CUDA Graph recapture. Update the nodes and restart ComfyUI. This node-only patch is independent of the **0.3.8** desktop portable distribution; adding Confucius to the desktop does not require another node update.
 
 Install **Breeze TTS 2 · T8star-Aix** through ComfyUI-Manager, or clone `https://github.com/T8mars/Comfyui-breeze-tts` into `ComfyUI/custom_nodes/` and install `requirements.txt` with the ComfyUI Python. Dependencies use the official Manager pipeline; the node contains no runtime pip subprocess and does not declare Torch, Torchaudio, Transformers, Tokenizers, or NumPy. The loader validates Transformers `>=4.57,<6` and downloads the fixed official model revision into `ComfyUI/models/breeze_tts/BreezeBlue_Breeze-TTS-2` after explicit license acceptance. The desktop app instead defaults to `%APPDATA%\T8star-Aix Voice Studio\models\Breeze-TTS-2`; these paths are intentionally independent.
 
@@ -36,4 +42,4 @@ The ComfyUI ZIP is not a standalone application and intentionally contains no la
 
 ## Legal boundary
 
-This distribution is unofficial. Source code is Apache-2.0. Model materials and self-hosted outputs are restricted to research and non-commercial use under `MODEL_LICENSE`; commercial rights are not included. Voice cloning requires the speaker's explicit, legally sufficient consent and the rights to all submitted recordings.
+This distribution is unofficial. Breeze source code is Apache-2.0. Breeze model materials and self-hosted outputs are restricted to research and non-commercial use under `MODEL_LICENSE`; commercial rights are not included. Confucius weights use their separate NetEase Youdao Model Use License; VAD, Whisper and runtime components retain their own licenses as recorded in `CONFUCIUS_NOTICE.md`, `WHISPER_NOTICE.md` and the bundled notices. Voice cloning requires the speaker's explicit, legally sufficient consent and the rights to all submitted recordings.

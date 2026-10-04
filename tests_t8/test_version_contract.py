@@ -28,13 +28,12 @@ def test_desktop_and_node_release_versions_are_internally_consistent() -> None:
     desktop_html = (ROOT / "desktop" / "src" / "index.html").read_text(encoding="utf-8")
 
     assert desktop_version == PROJECT_VERSION
-    # Standalone node fixes can advance the patch version without rebuilding
-    # the unrelated desktop distribution. Keep the same compatibility series.
+    # Desktop integrations and standalone nodes advance independently; neither
+    # release requires rebuilding the other. Keep the compatibility series.
     desktop_parts = tuple(map(int, desktop_version.split(".")))
     comfy_parts = tuple(map(int, comfy_version.split(".")))
     assert len(desktop_parts) == len(comfy_parts) == 3
     assert comfy_parts[:2] == desktop_parts[:2]
-    assert comfy_parts[2] >= desktop_parts[2]
     assert lock_package["version"] == desktop_version
     assert lock_package["packages"][""]["version"] == desktop_version
     assert f'__version__ = "{comfy_version}"' in comfy_entrypoint

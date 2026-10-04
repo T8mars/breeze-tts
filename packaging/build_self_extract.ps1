@@ -1,15 +1,17 @@
 [CmdletBinding()]
-param()
+param([string]$OutputRoot = '', [string]$SourcePackageDirectory = '')
 
 $ErrorActionPreference = 'Stop'
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $desktopRoot = Join-Path $projectRoot 'desktop'
 $package = Get-Content -LiteralPath (Join-Path $desktopRoot 'package.json') -Raw | ConvertFrom-Json
 $packageBaseName = "T8star-Aix-Voice-Studio-v$($package.version)"
+$desktopOut = if ($OutputRoot) { [IO.Path]::GetFullPath($OutputRoot) } else { Join-Path $desktopRoot 'out' }
 $packageDirectory = [System.IO.Path]::GetFullPath(
-    (Join-Path $desktopRoot "out\$packageBaseName-win32-x64")
+    (Join-Path $desktopOut "$packageBaseName-win32-x64")
 )
-$makeRoot = [System.IO.Path]::GetFullPath((Join-Path $desktopRoot 'out\make'))
+if ($SourcePackageDirectory) { $packageDirectory = [IO.Path]::GetFullPath($SourcePackageDirectory) }
+$makeRoot = [System.IO.Path]::GetFullPath((Join-Path $desktopOut 'make'))
 $outputDirectory = [System.IO.Path]::GetFullPath(
     (Join-Path $makeRoot 'self-extract\win32\x64')
 )
