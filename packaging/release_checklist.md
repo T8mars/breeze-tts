@@ -2,7 +2,7 @@
 
 ## Desktop 0.3.8 dual-ASR acceptance
 
-- [x] Both ComfyUI node source trees stay unchanged; Confucius source is vendored at its pinned commit.
+- [x] This desktop integration modifies neither ComfyUI node; Confucius source is vendored at its pinned commit.
 - [x] Python/desktop regressions cover engine selection, path validation/persistence, VRAM lifecycle and draft verification.
 - [x] Hugging Face model READMEs are updated without uploading duplicate weights.
 - [x] Native CUDA fatbins contain all requested architectures (75/80/86/89/90/100/120).
@@ -10,7 +10,9 @@
 - [x] Real GPU transcription passes for both engines, custom paths and long segmented Confucius audio.
 - [x] ASR releases VRAM; subsequent Breeze TTS and terminated-parent worker cleanup pass.
 - [x] Both UI entry points and mobile settings layout pass live-backend browser acceptance, including the packaged Confucius runtime with host Python/CUDA settings removed.
-- [ ] New portable ZIP/SFX are verified and GitHub Release assets are published.
+- [x] New portable ZIP/SFX are verified and GitHub Release assets are published.
+
+Published: [v0.3.8](https://github.com/T8mars/breeze-tts/releases/tag/v0.3.8), source `78584ebc82b76984bb006582edfc5740007ffbc1`. All 10 remote assets match their local sizes and SHA-256 hashes; all five parts reconstruct the verified full EXE. The unsigned ZIP/SFX and release manifest pass offline verification.
 
 ## Previous release baseline (0.3.6 / node 0.3.7)
 
