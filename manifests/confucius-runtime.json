@@ -29,7 +29,36 @@
   },
   "python": {
     "major_minor": "3.12",
+    "version": "3.12.14",
     "architecture": "64bit",
+    "provenance": {
+      "builder": "astral-sh/python-build-standalone",
+      "build_revision": "20260825",
+      "archive_url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260825/cpython-3.12.14%2B20260825-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+      "archive_sha256": "8e6aad12ef6fc9685e67ce66253f8f72d6e8fa02cb7187e5850bd4db5ecd9e2a",
+      "verification": "OpenSSL and libffi PE payloads match the official archive after excluding Authenticode checksum/security-directory/certificate fields. Local copies retain their valid OpenAI OpCo signature."
+    },
+    "bundled_libraries": [
+      {
+        "component": "OpenSSL",
+        "version": "3.5.8",
+        "license": "Apache-2.0",
+        "runtime_dlls": [
+          {"path": "python/DLLs/libcrypto-3-x64.dll", "sha256": "35e0ae43af2876903b00ba955e400f6da1787defb1ba18b7ff35e540c7f4ed66", "official_payload_sha256": "8b54c7df707f1fbd046b2520250dc84a43d3cb90261210a3f2f4eaca239bd0f7"},
+          {"path": "python/DLLs/libssl-3-x64.dll", "sha256": "5bb445df170ac3df4524cd1f7edbad09bb249b77d1144f58ebd1615f730d162e", "official_payload_sha256": "77cb95d0ee83f8f0c3ddbc4cea6173140b50b74d4b28873091a5c00d8653219f"}
+        ]
+      },
+      {
+        "component": "libffi",
+        "version": "3.4.2",
+        "license": "MIT",
+        "source_revision": "16fad4855b3d8c03b5910e405ff3a04395b39a98",
+        "version_evidence": "python-build-standalone 20260825 cpython-windows/build.py pins this cpython-source-deps commit; configure.ac reports 3.4.2.",
+        "runtime_dlls": [
+          {"path": "python/DLLs/libffi-8.dll", "sha256": "34985fc0a2d5942dd6c0cf3205549dc56ed6ebef410884419c87e5fe4e00e988", "official_payload_sha256": "78ec2d41bbc7bc9bcaf3b58a9cacc9efa1f53b2780fc33f4cb2e6e09d790c99c"}
+        ]
+      }
+    ],
     "dependencies": {
       "aiohttp": "3.14.3",
       "numpy": "2.5.3",
@@ -43,6 +72,10 @@
     },
     "imports": ["aiohttp", "numpy", "onnxruntime", "kaldi_native_fbank", "kaldiio", "pybind11", "requests", "soundfile", "soxr"]
   },
+  "supplemental_licenses": [
+    {"component": "OpenSSL", "version": "3.5.8", "revision": "f4dc4d58b48d346a8270183f89acf826d459b0ca", "source_url": "https://raw.githubusercontent.com/openssl/openssl/f4dc4d58b48d346a8270183f89acf826d459b0ca/LICENSE.txt", "source_path": "packaging/licenses/OpenSSL-3.5.8-LICENSE.txt", "runtime_path": "licenses/OpenSSL-3.5.8-LICENSE.txt", "size": 10175, "sha256": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a"},
+    {"component": "libffi", "version": "3.4.2", "revision": "16fad4855b3d8c03b5910e405ff3a04395b39a98", "source_url": "https://raw.githubusercontent.com/python/cpython-source-deps/16fad4855b3d8c03b5910e405ff3a04395b39a98/LICENSE", "source_path": "packaging/licenses/libffi-3.4.2-LICENSE.txt", "runtime_path": "licenses/libffi-3.4.2-LICENSE.txt", "size": 1132, "sha256": "a61d06e8f7be57928e71e800eb9273b05cb8868c484108afe41e4305bb320dde"}
+  ],
   "native": {
     "llama_cpp_repository": "https://github.com/ggml-org/llama.cpp",
     "llama_cpp_commit": "ad6c66839af3c5646fba8c6c2e2087a1e4e38948",

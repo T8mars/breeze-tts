@@ -73,6 +73,17 @@ def verify_models(model_root: Path, manifest: dict, errors: list[str]) -> None:
             errors.append(f"model {name}: {exc}")
 
 
+def verify_supplemental_licenses(root: Path, manifest: dict, errors: list[str], *, prepared: bool) -> None:
+    for item in manifest["supplemental_licenses"]:
+        name = item["runtime_path" if prepared else "source_path"]
+        try:
+            path = resolve_asset(root, name)
+            if path.stat().st_size != item["size"] or sha256(path) != item["sha256"]:
+                errors.append(f"supplemental license checksum mismatch: {name}")
+        except (OSError, ValueError) as exc:
+            errors.append(f"supplemental license {name}: {exc}")
+
+
 def runtime_files(runtime_root: Path, inventory_name: str):
     for path in sorted(runtime_root.rglob("*")):
         if path.is_file() and path.name not in (inventory_name, inventory_name + ".tmp") and "__pycache__" not in path.parts:
@@ -140,6 +151,7 @@ def main() -> int:
     errors: list[str] = []
     verify_source(root, manifest, errors, args.source_root)
     if args.source_only:
+        verify_supplemental_licenses(root, manifest, errors, prepared=False)
         print(json.dumps({"source_commit": manifest["source"]["commit"], "errors": errors}, indent=2))
         return bool(errors)
 
@@ -153,6 +165,8 @@ def main() -> int:
     python_root = runtime_root / "python"
     if sys.version_info[:2] != (3, 12) or struct.calcsize("P") != 8:
         errors.append(f"Worker must be 64-bit CPython 3.12, got {platform.python_version()}")
+    if platform.python_version() != manifest["python"]["version"]:
+        errors.append("Worker Python version differs from the pinned, license-audited runtime")
     if Path(sys.prefix).resolve() != python_root or Path(sys.base_prefix).resolve() != python_root:
         errors.append("Worker interpreter still depends on an external Python/venv")
     if (python_root / "pyvenv.cfg").exists():
@@ -177,6 +191,14 @@ def main() -> int:
     for name in ("CUDA-12.8-EULA.txt", "llama.cpp-LICENSE", "Microsoft-REDIST.txt", "Microsoft-ThirdPartyNotices.txt"):
         if not (runtime_root / "licenses" / name).is_file():
             errors.append(f"runtime license missing: {name}")
+    verify_supplemental_licenses(runtime_root, manifest, errors, prepared=True)
+    for component in manifest["python"]["bundled_libraries"]:
+        for item in component["runtime_dlls"]:
+            try:
+                if sha256(resolve_asset(runtime_root, item["path"])) != item["sha256"]:
+                    errors.append(f"bundled Python library differs from the license-audited pin: {item['path']}")
+            except (OSError, ValueError) as exc:
+                errors.append(f"bundled Python library {item['path']}: {exc}")
     verify_models(model_root, manifest, errors)
     native_import = False
     try:

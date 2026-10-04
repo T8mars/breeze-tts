@@ -22,11 +22,14 @@ if ($LASTEXITCODE -ne 0 -or $sourceCommit -ne $manifest.source.commit) {
 }
 if (-not $WorkerPython) { $WorkerPython = Join-Path $sourcePath '.runtime\worker\Scripts\python.exe' }
 $workerPath = (Resolve-Path -LiteralPath $WorkerPython).Path
-$workerInfoText = & $workerPath -I -B -c 'import json,sys,struct; print(json.dumps({"version":list(sys.version_info[:2]),"bits":struct.calcsize("P")*8,"base":sys.base_prefix,"prefix":sys.prefix}))'
+$workerInfoText = & $workerPath -I -B -c 'import json,sys,struct,platform; print(json.dumps({"version":list(sys.version_info[:2]),"full_version":platform.python_version(),"bits":struct.calcsize("P")*8,"base":sys.base_prefix,"prefix":sys.prefix}))'
 if ($LASTEXITCODE -ne 0) { throw 'Unable to inspect the source worker Python.' }
 $workerInfo = $workerInfoText | ConvertFrom-Json
 if ($workerInfo.bits -ne 64 -or ($workerInfo.version -join '.') -ne '3.12') {
     throw 'Confucius requires a 64-bit CPython 3.12 worker.'
+}
+if ($workerInfo.full_version -ne $manifest.python.version) {
+    throw "Worker Python must match the license-audited version $($manifest.python.version)."
 }
 $basePath = (Resolve-Path -LiteralPath $workerInfo.base).Path
 $workerPackages = Join-Path $workerInfo.prefix 'Lib\site-packages'
@@ -65,6 +68,24 @@ if ($extensions.Count -ne 1 -or $extensions[0].Name -notmatch '\.cp312-win_amd64
     throw 'Expected exactly one completed CPython 3.12 Windows x64 native extension.'
 }
 $cudaPath = (Resolve-Path -LiteralPath $CudaToolkit).Path
+# Inspect the completed CUDA DLL, not only CMake's requested targets. Architecture
+# suffixes such as sm_90a/sm_120a still belong to their numeric device generation.
+$cudaInspector = Join-Path $cudaPath 'bin\cuobjdump.exe'
+$cudaDllSource = Join-Path $nativeSource 'bin\Release\ggml-cuda.dll'
+if (-not (Test-Path -LiteralPath $cudaInspector -PathType Leaf) -or
+    -not (Test-Path -LiteralPath $cudaDllSource -PathType Leaf)) {
+    throw 'CUDA inspector or completed native CUDA DLL is missing.'
+}
+$fatbinOutput = & $cudaInspector --list-elf $cudaDllSource
+if ($LASTEXITCODE -ne 0) { throw 'Unable to inspect the native CUDA fatbin.' }
+$binaryArchitectures = @([regex]::Matches(($fatbinOutput -join [Environment]::NewLine), 'sm_(\d+)[af]?') |
+    ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
+foreach ($architecture in $requiredArchitectures) {
+    if ($architecture -notin $binaryArchitectures) {
+        throw "Native CUDA DLL is missing SM $architecture; found $($binaryArchitectures -join ';')."
+    }
+}
+Write-Host "Native CUDA binary architecture coverage: $($binaryArchitectures -join ';')"
 $redistBase = Join-Path $VisualStudioRoot 'VC\Redist\MSVC'
 $vcRuntime = Get-ChildItem -LiteralPath $redistBase -Directory |
     Where-Object { $_.Name -match '^\d+\.\d+\.\d+$' } |
@@ -124,6 +145,14 @@ Copy-Item -LiteralPath (Join-Path $llamaSource 'LICENSE') -Destination (Join-Pat
 $installedLicenses = Join-Path $VisualStudioRoot 'Licenses\2052'
 Copy-Item -LiteralPath (Join-Path $installedLicenses 'Redist.txt') -Destination (Join-Path $licensePath 'Microsoft-REDIST.txt') -Force
 Copy-Item -LiteralPath (Join-Path $installedLicenses 'ThirdPartyNotices.txt') -Destination (Join-Path $licensePath 'Microsoft-ThirdPartyNotices.txt') -Force
+foreach ($item in $manifest.supplemental_licenses) {
+    $sourceLicense = Join-Path $projectRoot $item.source_path
+    if ((Get-Item -LiteralPath $sourceLicense).Length -ne $item.size -or
+        (Get-FileHash -LiteralPath $sourceLicense -Algorithm SHA256).Hash.ToLowerInvariant() -ne $item.sha256) {
+        throw "Pinned supplemental license checksum verification failed: $($item.component)"
+    }
+    Copy-Item -LiteralPath $sourceLicense -Destination (Join-Path $runtimePath $item.runtime_path) -Force
+}
 
 foreach ($item in $manifest.models.files) {
     $relative = [string]$item.path

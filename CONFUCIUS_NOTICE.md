@@ -8,7 +8,14 @@ The component performs speech recognition, not translation. Transcripts remain d
 
 The T8 node and the upstream native adapter use Apache License 2.0. Their license and modification notices are included under `vendor/confucius-r2t2/LICENSE` and `vendor/confucius-r2t2/r2t2_native/NOTICE.md`. The native adapter was derived from NetEase Youdao's source at commit `26d55a54ce5670cff9947a167d8ed95d569fd4d9`.
 
-llama.cpp is built from commit `ad6c66839af3c5646fba8c6c2e2087a1e4e38948` and uses the MIT license, included as `confucius/licenses/llama.cpp-LICENSE`. CPython's complete license is included as `confucius/python/LICENSE.txt`; Python dependency licenses are retained with their `.dist-info` metadata and package data. These notices do not replace the licenses of individual components.
+llama.cpp is built from commit `ad6c66839af3c5646fba8c6c2e2087a1e4e38948` and uses the MIT license, included as `confucius/licenses/llama.cpp-LICENSE`. CPython's license is included as `confucius/python/LICENSE.txt`; Python dependency licenses are retained with their `.dist-info` metadata and package data. These notices do not replace the licenses of individual components.
+
+The standalone CPython 3.12.14 worker also includes these unchanged libraries:
+
+- OpenSSL 3.5.8, copyright 1998-2026 The OpenSSL Authors, uses Apache License 2.0. Its complete official license, taken from source commit `f4dc4d58b48d346a8270183f89acf826d459b0ca`, is included as `confucius/licenses/OpenSSL-3.5.8-LICENSE.txt`.
+- libffi 3.4.2 with CPython's Windows source patches at commit `16fad4855b3d8c03b5910e405ff3a04395b39a98`, copyright 1996-2021 Anthony Green, Red Hat, Inc and others, uses the MIT license. Its complete official copyright and permission notice is included as `confucius/licenses/libffi-3.4.2-LICENSE.txt`.
+
+The OpenSSL and libffi DLL payloads were compared with the official python-build-standalone `20260825` Windows CPython 3.12.14 artifact, excluding Authenticode checksum/security-directory/certificate fields. The bundled copies retain their valid OpenAI OpCo signatures; the binaries are not modified during preparation. Their full DLL hashes, official payload hashes, and exact license-file hashes and source URLs are fixed in the component manifest. The corresponding small license assets are retained under `packaging/licenses` in the GitHub source and copied into the portable runtime; preparing or using the runtime does not fetch licenses from the internet.
 
 ## Model assets
 
