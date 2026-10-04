@@ -7,14 +7,28 @@ from __future__ import annotations
 import argparse
 import base64
 import ctypes
+from contextlib import contextmanager
 import hashlib
 import json
 import os
 from pathlib import Path
 import sys
 import subprocess
+import shutil
 import tempfile
 import time
+
+
+@contextmanager
+def preserve_worker_log(data: Path, report: Path):
+    """Keep local native diagnostics even if an acceptance assertion fails."""
+    try:
+        yield
+    finally:
+        source = data / "logs/confucius-worker.log"
+        if source.is_file():
+            report.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source, report.with_suffix(".worker.log"))
 
 
 def main() -> None:
@@ -27,7 +41,7 @@ def main() -> None:
     args = parser.parse_args()
     sys.path.insert(0, str(args.project_root.resolve()))
     # This isolation also prevents smoke tests from changing the user's paths.
-    with tempfile.TemporaryDirectory(prefix="t8-asr-smoke-") as temporary:
+    with tempfile.TemporaryDirectory(prefix="t8-asr-smoke-") as temporary, preserve_worker_log(Path(temporary), args.report):
         data = Path(temporary)
         os.environ["T8_BREEZE_DATA_DIR"] = str(data)
         os.environ["T8_BREEZE_OUTPUT_DIR"] = str(data / "outputs")

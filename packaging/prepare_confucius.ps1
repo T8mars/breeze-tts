@@ -16,9 +16,9 @@ $sourcePath = (Resolve-Path -LiteralPath $SourceRoot).Path
 $runtimePath = [IO.Path]::GetFullPath($RuntimeRoot)
 $modelPath = [IO.Path]::GetFullPath($ModelRoot)
 $manifest = Get-Content -LiteralPath (Join-Path $projectRoot 'manifests\confucius-runtime.json') -Raw | ConvertFrom-Json
-$sourceCommit = (& git -C $sourcePath rev-parse HEAD).Trim()
+$sourceCommit = (& git -C $sourcePath rev-parse --verify "$($manifest.source.commit)^{commit}").Trim()
 if ($LASTEXITCODE -ne 0 -or $sourceCommit -ne $manifest.source.commit) {
-    throw "Confucius source must be at pinned commit $($manifest.source.commit), found $sourceCommit"
+    throw "Confucius source must contain pinned commit $($manifest.source.commit), found $sourceCommit"
 }
 if (-not $WorkerPython) { $WorkerPython = Join-Path $sourcePath '.runtime\worker\Scripts\python.exe' }
 $workerPath = (Resolve-Path -LiteralPath $WorkerPython).Path
@@ -42,7 +42,7 @@ if ($runtimePath.Equals($sourcePath, [StringComparison]::OrdinalIgnoreCase) -or
     $runtimePath.StartsWith($basePath + '\', [StringComparison]::OrdinalIgnoreCase)) {
     throw 'The output runtime must be separate from the source project and base Python.'
 }
-& $workerPath -I -B (Join-Path $PSScriptRoot 'verify_confucius_runtime.py') --project-root $projectRoot --source-root $sourcePath --source-only
+& $workerPath -I -B (Join-Path $PSScriptRoot 'verify_confucius_runtime.py') --project-root $projectRoot --source-root $sourcePath --source-revision $sourceCommit --source-only
 if ($LASTEXITCODE -ne 0) { throw 'Vendored Confucius source checksum verification failed.' }
 
 if (-not $NativeBuildDir) { $NativeBuildDir = Join-Path $sourcePath '.runtime\build-native-cu128' }
@@ -62,6 +62,10 @@ $llamaSource = $llamaMatch.Groups[1].Value.Trim()
 $llamaCommit = (& git -C $llamaSource rev-parse HEAD).Trim()
 if ($LASTEXITCODE -ne 0 -or $llamaCommit -ne $manifest.native.llama_cpp_commit) {
     throw "Native build must use llama.cpp commit $($manifest.native.llama_cpp_commit)."
+}
+$llamaChanges = & git -C $llamaSource status --porcelain --untracked-files=normal
+if ($LASTEXITCODE -ne 0 -or $llamaChanges) {
+    throw 'Native llama.cpp checkout must be clean at its pinned commit.'
 }
 $extensions = @(Get-ChildItem -LiteralPath (Join-Path $nativeSource 'python') -Recurse -File -Filter 'qwen3asr_native*.pyd')
 if ($extensions.Count -ne 1 -or $extensions[0].Name -notmatch '\.cp312-win_amd64\.pyd$') {

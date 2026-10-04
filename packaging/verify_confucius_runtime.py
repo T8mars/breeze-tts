@@ -9,6 +9,7 @@ import json
 import os
 import platform
 import struct
+import subprocess
 import sys
 from importlib import metadata
 from pathlib import Path
@@ -22,9 +23,13 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def source_sha256(path: Path) -> str:
-    text = path.read_text(encoding="utf-8").replace("\r\n", "\n").replace("\r", "\n")
+def source_text_sha256(text: str) -> str:
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def source_sha256(path: Path) -> str:
+    return source_text_sha256(path.read_text(encoding="utf-8"))
 
 
 def resolve_asset(root: Path, name: str) -> Path:
@@ -39,8 +44,12 @@ def resolve_asset(root: Path, name: str) -> Path:
     return path
 
 
-def verify_source(root: Path, manifest: dict, errors: list[str], external_source: Path | None = None) -> None:
+def verify_source(root: Path, manifest: dict, errors: list[str], external_source: Path | None = None,
+                  source_revision: str | None = None) -> None:
     source = manifest["source"]
+    if source_revision is not None and (external_source is None or source_revision != source["commit"]):
+        errors.append("original source revision must match the pinned commit and have a source root")
+        return
     vendor = root / source["vendor_directory"]
     for name, expected in source["files"].items():
         try:
@@ -49,9 +58,21 @@ def verify_source(root: Path, manifest: dict, errors: list[str], external_source
                 errors.append(f"source checksum mismatch: {name}")
             if external_source is not None:
                 external_name = "vendor/" + name if name.startswith("r2t2_native/") else name
-                if source_sha256(resolve_asset(external_source, external_name)) != expected:
+                if source_revision is not None and not name.startswith("r2t2_native/"):
+                    # Runtime Python comes from the pinned vendor snapshot, not
+                    # a source checkout another task may be actively changing.
+                    blob = subprocess.run(["git", "-C", str(external_source), "show",
+                                           f"{source_revision}:{external_name}"],
+                                          check=True, capture_output=True, text=True,
+                                          encoding="utf-8", timeout=30).stdout
+                    original_hash = source_text_sha256(blob)
+                else:
+                    # Native build inputs must still match on disk: the build
+                    # read their working-tree files, not a Git object.
+                    original_hash = source_sha256(resolve_asset(external_source, external_name))
+                if original_hash != expected:
                     errors.append(f"original source checksum mismatch: {name}")
-        except (OSError, ValueError) as exc:
+        except (OSError, ValueError, subprocess.SubprocessError) as exc:
             errors.append(f"source {name}: {exc}")
 
 
@@ -142,6 +163,7 @@ def main() -> int:
     parser.add_argument("--runtime-root", type=Path)
     parser.add_argument("--model-root", type=Path)
     parser.add_argument("--source-root", type=Path)
+    parser.add_argument("--source-revision")
     parser.add_argument("--source-only", action="store_true")
     parser.add_argument("--write-inventory", action="store_true")
     parser.add_argument("--cuda-architectures", default="")
@@ -149,7 +171,7 @@ def main() -> int:
     root = args.project_root.resolve()
     manifest = json.loads((root / "manifests/confucius-runtime.json").read_text(encoding="utf-8"))
     errors: list[str] = []
-    verify_source(root, manifest, errors, args.source_root)
+    verify_source(root, manifest, errors, args.source_root, args.source_revision)
     if args.source_only:
         verify_supplemental_licenses(root, manifest, errors, prepared=False)
         print(json.dumps({"source_commit": manifest["source"]["commit"], "errors": errors}, indent=2))

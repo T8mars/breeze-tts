@@ -24,6 +24,7 @@ jobs:
       - run: >-
           python -m pytest -q tests_t8/test_core.py tests_t8/test_server.py
           tests_t8/test_transcription.py tests_t8/test_confucius_integration.py
+          tests_t8/test_confucius_source_pin.py
           tests_t8/test_version_contract.py -m "not model"
       - name: Run ComfyUI node tests
         working-directory: comfyui-breeze-tts-T8
