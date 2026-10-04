@@ -74,6 +74,37 @@ def test_context_limit_checked_before_worker_start(tmp_path):
         confucius.transcribe(tmp_path / "unused", context="x" * 8193)
 
 
+def test_worker_launch_is_isolated_utf8_and_single_gpu(monkeypatch, tmp_path):
+    captured = {}
+    monkeypatch.setattr(confucius, "runtime_dir", lambda: tmp_path / "portable runtime")
+    monkeypatch.setenv("PYTHONHOME", "untrusted-host-python")
+    monkeypatch.setenv("PYTHONPATH", "untrusted-host-modules")
+    monkeypatch.setenv("CUDA_VISIBLE_DEVICES", "2,3")
+
+    class Process:
+        def poll(self):
+            return None
+
+    def popen(command, **options):
+        captured.update(command=command, **options)
+        return Process()
+
+    monkeypatch.setattr(confucius.subprocess, "Popen", popen)
+    manager = confucius._worker_manager(tmp_path / "models")
+    monkeypatch.setattr(manager, "_request", lambda *_args, **_kwargs: {"generation": "test"})
+    try:
+        manager._start()
+        assert captured["command"][1:6] == ["-X", "utf8", "-X", "faulthandler", "-I"]
+        assert captured["env"]["CUDA_VISIBLE_DEVICES"] == "2"
+        assert "PYTHONHOME" not in captured["env"] and "PYTHONPATH" not in captured["env"]
+        assert captured["env"]["CUDA_PATH"] == str(tmp_path / "portable runtime" / "cuda")
+        assert "--parent-pid" in captured["command"]
+    finally:
+        if manager._log_file:
+            manager._log_file.close()
+        manager.process = None
+
+
 def test_confucius_result_does_not_invent_subtitles(monkeypatch, tmp_path):
     audio = tmp_path / "source.wav"
     sf.write(audio, np.zeros(16000, dtype=np.float32), 16000)

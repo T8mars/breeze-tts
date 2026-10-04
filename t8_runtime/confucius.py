@@ -102,7 +102,8 @@ def _worker_manager(models: Path):
             log_path.parent.mkdir(parents=True, exist_ok=True)
             self._log_file = log_path.open("ab", buffering=0)
             self.process = subprocess.Popen(
-                [str(runtime / "python/python.exe"), "-I", str(Path(__file__).with_name("confucius_worker.py")),
+                [str(runtime / "python/python.exe"), "-X", "utf8", "-X", "faulthandler", "-I",
+                 str(Path(__file__).with_name("confucius_worker.py")),
                  "--port", str(self.port), "--parent-pid", str(os.getpid()),
                  "--source", str(source), "--runtime", str(runtime),
                  "--models", str(models), "--vad", str(vad_dir(models))],
